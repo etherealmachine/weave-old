@@ -11,18 +11,30 @@ import (
 )
 
 type UI struct {
-	SelectedTileIndex *int
+	SelectedTileIndex int
 	Tileset           *ebiten.Image
 	Tiles             []*ebiten.Image
 	Width             int
+	Map               []int
 }
 
 func (ui *UI) Draw(img *ebiten.Image) {
-	if ui.Tiles != nil && ui.SelectedTileIndex != nil {
+	if ui.Tiles != nil && ui.SelectedTileIndex > 0 {
 		x, y := ebiten.CursorPosition()
 		op := new(ebiten.DrawImageOptions)
 		op.GeoM.Translate(math.Floor(float64(x)/16)*16, math.Floor(float64(y)/16)*16)
-		img.DrawImage(ui.Tiles[*ui.SelectedTileIndex], op)
+		img.DrawImage(ui.Tiles[ui.SelectedTileIndex-1], op)
+	}
+	if ui.Map != nil {
+		for y := 0; y < len(ui.Map)/ui.Width; y++ {
+			for x := 0; x < ui.Width; x++ {
+				if ui.Map[y*ui.Width+x] > 0 {
+					op := new(ebiten.DrawImageOptions)
+					op.GeoM.Translate(float64(x*16), float64(y*16))
+					img.DrawImage(ui.Tiles[ui.Map[y*ui.Width+x]-1], op)
+				}
+			}
+		}
 	}
 }
 
@@ -31,7 +43,15 @@ func (ui *UI) Update() error {
 }
 
 func (ui *UI) PasteTile(event *bento.Event) {
-	log.Println(event.X, event.Y)
+	if ui.Map == nil {
+		bounds := event.Box.Bounds()
+		ui.Map = make([]int, (bounds.Dx()/16)*(bounds.Dy()/16))
+	}
+	if ui.SelectedTileIndex > 0 {
+		tileX := event.X / 16
+		tileY := event.Y / 16
+		ui.Map[tileY*ui.Width+tileX] = ui.SelectedTileIndex
+	}
 }
 
 func (ui *UI) SelectTile(event *bento.Event) {
@@ -56,8 +76,7 @@ func (ui *UI) SelectTile(event *bento.Event) {
 	}
 	tileX := event.X / 17
 	tileY := event.Y / 17
-	i := tileY*ui.Width + tileX
-	ui.SelectedTileIndex = &i
+	ui.SelectedTileIndex = (tileY*ui.Width + tileX) + 1
 }
 
 func (ui *UI) UI() string {
