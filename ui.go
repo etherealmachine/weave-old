@@ -81,7 +81,15 @@ func (ui *UI) SelectTile(event *bento.Event) {
 
 func (ui *UI) UI() string {
 	return `<col grow="1">
-		<canvas grow="1" draw="Draw" update="Update" onClick="PasteTile" />
+		<row grow="1">
+			<col grow="1">
+				<canvas grow="1" draw="Draw" update="Update" onClick="PasteTile" />
+			</col>
+			<col grow="0 1">
+				<text color="#ffffff" margin="4px" padding="12px">Layer 1</text>
+				<button color="#ffffff" margin="4px" padding="12px" btn="button.png 6">Add Layer</button>
+			</col>
+		</row>
 		<row grow="1 0" justify="end" margin="16px">
 			<img onClick="SelectTile" src="dungeon.png" />
 		</row>
