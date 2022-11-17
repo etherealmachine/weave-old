@@ -112,7 +112,7 @@ func (ui *UI) UI() string {
 			</col>
 			<col grow="0 1">
 				{{ range .Layers }}
-					<button btn="button.png 6" color="#ffffff" margin="4px" padding="12px">{{ .Name }}</button>
+					<button onClick="SelectLayer" btn="button.png 6" color="#ffffff" margin="4px" padding="12px">{{ .Name }}</button>
 				{{ end }}
 				<button onClick="AddLayer" color="#ffffff" margin="4px" padding="12px" btn="button.png 6">Add Layer</button>
 			</col>
