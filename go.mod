@@ -7,7 +7,8 @@ require (
 	github.com/hajimehoshi/ebiten/v2 v2.2.5
 )
 
-replace github.com/etherealmachine/bento => /home/jpettit/code/bento
+// replace github.com/etherealmachine/bento => /home/jpettit/code/bento
+replace github.com/etherealmachine/bento => /Users/jpettit/code/bento
 
 require (
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20210727001814-0db043d8d5be // indirect
