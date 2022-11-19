@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 
 	"github.com/etherealmachine/bento"
@@ -45,7 +46,7 @@ func (ui *UI) Draw(img *ebiten.Image) {
 					tile := layer.Tiles[y*layer.Width+x] - 1
 					img.DrawImage(ui.Tiles[tile], op)
 					if ui.tileAt(x, y+1, i) == 0 {
-						for adj := range ui.adj(tile, down) {
+						for _, adj := range ui.adj(tile, down) {
 							op.GeoM.Translate(0, 16)
 							op.ColorM.Scale(1, 1, 1, 0.5)
 							img.DrawImage(ui.Tiles[adj], op)
@@ -164,7 +165,7 @@ func (ui *UI) tileAt(x, y, i int) int {
 	if y < 0 || y >= layer.Height {
 		return 0
 	}
-	return layer.Tiles[y*layer.Width+x] - 1
+	return layer.Tiles[y*layer.Width+x]
 }
 
 type direction int
@@ -204,6 +205,7 @@ func (ui *UI) adj(t1 int, dir direction) []int {
 		tiles[i] = t
 		i++
 	}
+	sort.Ints(tiles)
 	return tiles
 }
 
