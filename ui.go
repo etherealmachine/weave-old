@@ -42,12 +42,13 @@ func (ui *UI) Draw(img *ebiten.Image) {
 			for x := 0; x < layer.Width; x++ {
 				if layer.Tiles[y*layer.Width+x] > 0 {
 					op := new(ebiten.DrawImageOptions)
-					op.GeoM.Translate(float64(x*16), float64(y*16))
+					op.GeoM.Scale(2, 2)
+					op.GeoM.Translate(float64(x*32), float64(y*32))
 					tile := layer.Tiles[y*layer.Width+x] - 1
 					img.DrawImage(ui.Tiles[tile], op)
 					if ui.tileAt(x, y+1, i) == 0 {
 						for _, adj := range ui.adj(tile, down) {
-							op.GeoM.Translate(0, 16)
+							op.GeoM.Translate(0, 32)
 							op.ColorM.Scale(1, 1, 1, 0.5)
 							img.DrawImage(ui.Tiles[adj], op)
 							break
@@ -60,9 +61,18 @@ func (ui *UI) Draw(img *ebiten.Image) {
 	if ui.Tiles != nil && ui.SelectedTileIndex > 0 {
 		x, y := ebiten.CursorPosition()
 		op := new(ebiten.DrawImageOptions)
-		op.GeoM.Translate(math.Floor(float64(x)/16)*16, math.Floor(float64(y)/16)*16)
+		op.GeoM.Scale(2, 2)
+		op.GeoM.Translate(math.Floor(float64(x)/32)*32, math.Floor(float64(y)/32)*32)
 		img.DrawImage(ui.Tiles[ui.SelectedTileIndex-1], op)
 	}
+}
+
+func (ui *UI) Update(event *bento.Event) bool {
+	_, sy := ebiten.Wheel()
+	if sy != 0 {
+		log.Println(sy)
+	}
+	return false
 }
 
 func (ui *UI) AddLayer(event *bento.Event) {
@@ -80,8 +90,8 @@ func (ui *UI) PasteTile(event *bento.Event) {
 		return
 	}
 	if ui.SelectedTileIndex > 0 {
-		tileX := event.X / 16
-		tileY := event.Y / 16
+		tileX := event.X / 32
+		tileY := event.Y / 32
 		layer := ui.Layers[ui.SelectedLayer]
 		layer.Tiles[tileY*layer.Width+tileX] = ui.SelectedTileIndex
 		ui.Save()
@@ -94,8 +104,8 @@ func (ui *UI) SelectLayer(event *bento.Event) {
 }
 
 func (ui *UI) SelectTile(event *bento.Event) {
-	tileX := event.X / 17
-	tileY := event.Y / 17
+	tileX := event.X / 34
+	tileY := event.Y / 34
 	ui.SelectedTileIndex = (tileY*ui.TileWidth + tileX) + 1
 }
 
@@ -109,7 +119,7 @@ func (ui *UI) initialize(mapBounds image.Rectangle) {
 	width := bounds.Dx() / 17
 	ui.TileWidth = width
 	height := bounds.Dy() / 17
-	for y := 0; y < height; y++ {
+	for y := 0; y <= height; y++ {
 		for x := 0; x < width; x++ {
 			tile := ebiten.NewImageFromImage(
 				ui.Tileset.SubImage(
@@ -230,7 +240,7 @@ func (ui *UI) UI() string {
 	return `<col grow="1">
 		<row grow="1">
 			<col grow="1">
-				<canvas grow="1" onDraw="Draw" onHover="PasteTile" />
+				<canvas grow="1" onDraw="Draw" onHover="PasteTile" onUpdate="Update" />
 			</col>
 			<col grow="0 1">
 				{{ range $i, $layer := .Layers }}
@@ -240,13 +250,14 @@ func (ui *UI) UI() string {
 							btn="button.png 6"
 							color="#ffffff"
 							margin="4px"
-							padding="12px">{{ $layer.Name }}</button>
+							padding="12px"
+							underline="{{ eq $i $.SelectedLayer }}">{{ $layer.Name }}</button>
 				{{ end }}
 				<button onClick="AddLayer" color="#ffffff" margin="4px" padding="12px" btn="button.png 6">Add Layer</button>
 			</col>
 		</row>
 		<row grow="1 0" justify="end" margin="16px">
-			<img onClick="SelectTile" src="dungeon.png" />
+			<img onClick="SelectTile" src="dungeon.png" scale="2" />
 		</row>
 	</col>`
 }
