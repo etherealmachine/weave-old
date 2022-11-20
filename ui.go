@@ -17,8 +17,11 @@ import (
 
 type UI struct {
 	SelectedTileIndex int
-	TileWidth         int
 	Tileset           *ebiten.Image
+	TilesetWidth      int
+	TileWidth         int
+	Spacing           int
+	Scale             float64
 	Tiles             []*ebiten.Image
 	SelectedLayer     int
 	Layers            []*Layer
@@ -37,32 +40,35 @@ func (ui *UI) Draw(img *ebiten.Image) {
 		ui.initialize(img.Bounds())
 		ui.Load()
 	}
-	for i, layer := range ui.Layers {
+	for _, layer := range ui.Layers {
 		for y := 0; y < layer.Height; y++ {
 			for x := 0; x < layer.Width; x++ {
 				if layer.Tiles[y*layer.Width+x] > 0 {
 					op := new(ebiten.DrawImageOptions)
-					op.GeoM.Scale(2, 2)
-					op.GeoM.Translate(float64(x*32), float64(y*32))
+					op.GeoM.Translate(float64(x*ui.TileWidth), float64(y*ui.TileWidth))
+					op.GeoM.Scale(ui.Scale, ui.Scale)
 					tile := layer.Tiles[y*layer.Width+x] - 1
 					img.DrawImage(ui.Tiles[tile], op)
-					if ui.tileAt(x, y+1, i) == 0 {
-						for _, adj := range ui.adj(tile, down) {
-							op.GeoM.Translate(0, 32)
-							op.ColorM.Scale(1, 1, 1, 0.5)
-							img.DrawImage(ui.Tiles[adj], op)
-							break
+					/*
+						if ui.tileAt(x, y+1, i) == 0 {
+							for _, adj := range ui.adj(tile, down) {
+								op.GeoM.Translate(0, 32)
+								op.ColorM.Scale(1, 1, 1, 0.5)
+								img.DrawImage(ui.Tiles[adj], op)
+								break
+							}
 						}
-					}
+					*/
 				}
 			}
 		}
 	}
 	if ui.Tiles != nil && ui.SelectedTileIndex > 0 {
 		x, y := ebiten.CursorPosition()
+		tileX, tileY := math.Floor(float64(x)/(float64(ui.TileWidth)*ui.Scale)), math.Floor(float64(y)/(float64(ui.TileWidth)*ui.Scale))
 		op := new(ebiten.DrawImageOptions)
-		op.GeoM.Scale(2, 2)
-		op.GeoM.Translate(math.Floor(float64(x)/32)*32, math.Floor(float64(y)/32)*32)
+		op.GeoM.Translate(tileX*float64(ui.TileWidth), tileY*float64(ui.TileWidth))
+		op.GeoM.Scale(ui.Scale, ui.Scale)
 		img.DrawImage(ui.Tiles[ui.SelectedTileIndex-1], op)
 	}
 }
@@ -70,7 +76,11 @@ func (ui *UI) Draw(img *ebiten.Image) {
 func (ui *UI) Update(event *bento.Event) bool {
 	_, sy := ebiten.Wheel()
 	if sy != 0 {
-		log.Println(sy)
+		if sy > 0 {
+			ui.Scale *= 1.1
+		} else {
+			ui.Scale /= 1.1
+		}
 	}
 	return false
 }
@@ -86,14 +96,15 @@ func (ui *UI) AddLayer(event *bento.Event) {
 }
 
 func (ui *UI) PasteTile(event *bento.Event) {
-	if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		return
-	}
-	if ui.SelectedTileIndex > 0 {
-		tileX := event.X / 32
-		tileY := event.Y / 32
+	tileX := int(float64(event.X) / (float64(ui.TileWidth) * ui.Scale))
+	tileY := int(float64(event.Y) / (float64(ui.TileWidth) * ui.Scale))
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) && ui.SelectedTileIndex > 0 {
 		layer := ui.Layers[ui.SelectedLayer]
 		layer.Tiles[tileY*layer.Width+tileX] = ui.SelectedTileIndex
+		ui.Save()
+	} else if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+		layer := ui.Layers[ui.SelectedLayer]
+		layer.Tiles[tileY*layer.Width+tileX] = 0
 		ui.Save()
 	}
 }
@@ -104,9 +115,9 @@ func (ui *UI) SelectLayer(event *bento.Event) {
 }
 
 func (ui *UI) SelectTile(event *bento.Event) {
-	tileX := event.X / 34
-	tileY := event.Y / 34
-	ui.SelectedTileIndex = (tileY*ui.TileWidth + tileX) + 1
+	tileX := int(float64(event.X) / (float64(ui.TileWidth+ui.Spacing) * ui.Scale))
+	tileY := int(float64(event.Y) / (float64(ui.TileWidth+ui.Spacing) * ui.Scale))
+	ui.SelectedTileIndex = (tileY*ui.TilesetWidth + tileX) + 1
 }
 
 func (ui *UI) initialize(mapBounds image.Rectangle) {
@@ -115,20 +126,24 @@ func (ui *UI) initialize(mapBounds image.Rectangle) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	ui.Scale = 1
+	ui.TileWidth = 16
+	ui.Spacing = 1
 	bounds := ui.Tileset.Bounds()
-	width := bounds.Dx() / 17
-	ui.TileWidth = width
-	height := bounds.Dy() / 17
+	s := ui.TileWidth + ui.Spacing
+	width := bounds.Dx() / s
+	ui.TilesetWidth = width
+	height := bounds.Dy() / s
 	for y := 0; y <= height; y++ {
 		for x := 0; x < width; x++ {
 			tile := ebiten.NewImageFromImage(
 				ui.Tileset.SubImage(
-					image.Rect(x*17, y*17, (x+1)*17, (y+1)*17)))
+					image.Rect(x*s, y*s, (x+1)*s, (y+1)*s)))
 			ui.Tiles = append(ui.Tiles, tile)
 		}
 	}
-	mapWidth := mapBounds.Dx() / 16
-	mapHeight := mapBounds.Dy() / 16
+	mapWidth := mapBounds.Dx() / ui.TileWidth
+	mapHeight := mapBounds.Dy() / ui.TileWidth
 	ui.Layers = []*Layer{
 		{
 			Name:   "Layer 1",
@@ -257,7 +272,7 @@ func (ui *UI) UI() string {
 			</col>
 		</row>
 		<row grow="1 0" justify="end" margin="16px">
-			<img onClick="SelectTile" src="dungeon.png" scale="2" />
+			<img onClick="SelectTile" src="dungeon.png" scale="{{ .Scale }}" />
 		</row>
 	</col>`
 }
