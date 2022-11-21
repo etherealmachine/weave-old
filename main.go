@@ -14,7 +14,7 @@ type Game struct {
 }
 
 func NewGame() *Game {
-	ui, err := bento.Build(&UI{})
+	ui, err := bento.Build(NewUI())
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/etherealmachine/bento"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	inputlib "github.com/quasilyte/ebitengine-input"
 )
 
 type UI struct {
@@ -22,10 +23,14 @@ type UI struct {
 	TileWidth         int
 	Spacing           int
 	Scale             float64
+	OffsetX, OffsetY  float64
+	DragX, DragY      int
 	Tiles             []*ebiten.Image
 	SelectedLayer     int
 	Layers            []*Layer
 	Adjacent          map[int][]map[int]bool
+	InputSystem       inputlib.System
+	Input             *inputlib.Handler
 }
 
 type Layer struct {
@@ -33,6 +38,24 @@ type Layer struct {
 	Width  int
 	Height int
 	Tiles  []int
+}
+
+const (
+	ActionPaste = iota
+	ActionDrag
+)
+
+func NewUI() *UI {
+	ui := new(UI)
+	ui.InputSystem.Init(inputlib.SystemConfig{
+		DevicesEnabled: inputlib.AnyInput,
+	})
+	keymap := inputlib.Keymap{
+		ActionPaste: {inputlib.KeyMouseLeft},
+		ActionDrag:  {inputlib.KeyMouseRight},
+	}
+	ui.Input = ui.InputSystem.NewHandler(0, keymap)
+	return ui
 }
 
 func (ui *UI) Draw(img *ebiten.Image) {
@@ -45,7 +68,7 @@ func (ui *UI) Draw(img *ebiten.Image) {
 			for x := 0; x < layer.Width; x++ {
 				if layer.Tiles[y*layer.Width+x] > 0 {
 					op := new(ebiten.DrawImageOptions)
-					op.GeoM.Translate(float64(x*ui.TileWidth), float64(y*ui.TileWidth))
+					op.GeoM.Translate(float64(x*ui.TileWidth)+ui.OffsetX, float64(y*ui.TileWidth)+ui.OffsetY)
 					op.GeoM.Scale(ui.Scale, ui.Scale)
 					tile := layer.Tiles[y*layer.Width+x] - 1
 					img.DrawImage(ui.Tiles[tile], op)
@@ -74,6 +97,7 @@ func (ui *UI) Draw(img *ebiten.Image) {
 }
 
 func (ui *UI) Update(event *bento.Event) bool {
+	ui.InputSystem.Update()
 	_, sy := ebiten.Wheel()
 	if sy != 0 {
 		if sy > 0 {
@@ -95,17 +119,27 @@ func (ui *UI) AddLayer(event *bento.Event) {
 	})
 }
 
-func (ui *UI) PasteTile(event *bento.Event) {
+func (ui *UI) Hover(event *bento.Event) {
 	tileX := int(float64(event.X) / (float64(ui.TileWidth) * ui.Scale))
 	tileY := int(float64(event.Y) / (float64(ui.TileWidth) * ui.Scale))
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) && ui.SelectedTileIndex > 0 {
+	if ui.Input.ActionIsPressed(ActionPaste) && !ebiten.IsKeyPressed(ebiten.KeyControl) && ui.SelectedTileIndex > 0 {
 		layer := ui.Layers[ui.SelectedLayer]
 		layer.Tiles[tileY*layer.Width+tileX] = ui.SelectedTileIndex
 		ui.Save()
-	} else if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+	} else if ui.Input.ActionIsPressed(ActionPaste) {
 		layer := ui.Layers[ui.SelectedLayer]
 		layer.Tiles[tileY*layer.Width+tileX] = 0
 		ui.Save()
+	} else if ui.Input.ActionIsPressed(ActionDrag) {
+		if ui.DragX != 0 || ui.DragY != 0 {
+			ui.OffsetX += float64(event.X-ui.DragX) / ui.Scale
+			ui.OffsetY += float64(event.Y-ui.DragY) / ui.Scale
+		}
+		ui.DragX = event.X
+		ui.DragY = event.Y
+	} else {
+		ui.DragX = 0
+		ui.DragY = 0
 	}
 }
 
@@ -255,7 +289,7 @@ func (ui *UI) UI() string {
 	return `<col grow="1">
 		<row grow="1">
 			<col grow="1">
-				<canvas grow="1" onDraw="Draw" onHover="PasteTile" onUpdate="Update" />
+				<canvas grow="1" onDraw="Draw" onHover="Hover" onUpdate="Update" />
 			</col>
 			<col grow="0 1">
 				{{ range $i, $layer := .Layers }}
