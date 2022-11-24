@@ -88,6 +88,10 @@ func (ui *UI) Hover(event *bento.Event) {
 	*/
 }
 
+func (ui *UI) SelectTileset(event *bento.Event) {
+	ui.SelectedTileset = event.Box.Content
+}
+
 func (ui *UI) SelectTile(event *bento.Event) {
 	ui.SelectedTileIndex = ui.Tilemap.Tilesets[ui.SelectedTileset].TileAt(event.X/2, event.Y/2)
 }
@@ -99,8 +103,20 @@ func (ui *UI) UI() string {
 				<canvas grow="1" onDraw="Draw" onHover="Hover" onUpdate="Update" />
 			</col>
 		</row>
-		<row float="true" justify="end" margin="16px">
+		<col float="true" justifySelf="end" margin="16px">
+			<row grow="1" justify="between" margin="0 0 12px 0">
+				{{ range $name, $tileset := .Tilemap.Tilesets }}
+					<button
+							font="NotoSans 18"
+							btn="button.png 6"
+							color="#ffffff"
+							padding="12px"
+							underline="{{ eq $.SelectedTileset $name }}"
+							onClick="SelectTileset"
+					>{{ $name }}</button>
+				{{ end }}
+			</row>
 			<img onClick="SelectTile" src="{{ .SelectedTileset }}" scale="2" zIndex="100" />
-		</row>
+		</col>
 	</col>`
 }
