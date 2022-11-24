@@ -63,33 +63,38 @@ func (ui *UI) Update(event *bento.Event) bool {
 }
 
 func (ui *UI) Hover(event *bento.Event) {
-	/*
-		tileX := int(float64(event.X) / (float64(ui.TileWidth) * ui.Scale))
-		tileY := int(float64(event.Y) / (float64(ui.TileWidth) * ui.Scale))
-		if ui.Input.ActionIsPressed(ActionPaste) && !ebiten.IsKeyPressed(ebiten.KeyControl) && ui.SelectedTileIndex > 0 {
-			layer := ui.Layers[ui.SelectedLayer]
-			layer.Tiles[tileY*layer.Width+tileX] = ui.SelectedTileIndex
-			ui.Save()
-		} else if ui.Input.ActionIsPressed(ActionPaste) {
-			layer := ui.Layers[ui.SelectedLayer]
-			layer.Tiles[tileY*layer.Width+tileX] = 0
-			ui.Save()
-		} else if ui.Input.ActionIsPressed(ActionDrag) {
-			if ui.DragX != 0 || ui.DragY != 0 {
-				ui.OffsetX += float64(event.X-ui.DragX) / ui.Scale
-				ui.OffsetY += float64(event.Y-ui.DragY) / ui.Scale
-			}
-			ui.DragX = event.X
-			ui.DragY = event.Y
-		} else {
-			ui.DragX = 0
-			ui.DragY = 0
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		if tile := ui.Tilemap.Tilesets[ui.SelectedTileset].GetTile(ui.SelectedTileIndex); tile != nil {
+			x, y := ebiten.CursorPosition()
+			bounds := tile.Bounds()
+			w, h := ui.Scale*float64(bounds.Dx()), ui.Scale*float64(bounds.Dy())
+			tileX := int(float64(x) / w)
+			tileY := int(float64(y) / h)
+			ui.Tilemap.SetTile(ui.SelectedTileset, ui.SelectedTileIndex, tileX, tileY)
 		}
-	*/
+	}
+
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+	}
+
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
+		if ui.DragX != 0 || ui.DragY != 0 {
+			ui.OffsetX += float64(event.X-ui.DragX) / ui.Scale
+			ui.OffsetY += float64(event.Y-ui.DragY) / ui.Scale
+		}
+		ui.DragX = event.X
+		ui.DragY = event.Y
+	} else {
+		ui.DragX = 0
+		ui.DragY = 0
+	}
 }
 
 func (ui *UI) SelectTileset(event *bento.Event) {
-	ui.SelectedTileset = event.Box.Content
+	if event.Box.Content != ui.SelectedTileset {
+		ui.SelectedTileset = event.Box.Content
+		ui.SelectedTileIndex = 0
+	}
 }
 
 func (ui *UI) SelectTile(event *bento.Event) {

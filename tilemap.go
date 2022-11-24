@@ -51,6 +51,10 @@ func (m *Tilemap) Load(filename string) error {
 	return nil
 }
 
+func (m *Tilemap) SetTile(tileset string, index, x, y int) {
+
+}
+
 func (s *Tileset) GetTile(index int) *ebiten.Image {
 	if s == nil || index <= 0 {
 		return nil
