@@ -42,7 +42,7 @@ func (g *Game) Layout(ow, oh int) (int, int) {
 func main() {
 	log.SetFlags(log.Lshortfile)
 	ebiten.SetWindowSize(1920, 1080)
-	ebiten.SetWindowResizable(true)
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetWindowTitle("weave")
 	//ebiten.SetFullscreen(true)
 	if err := ebiten.RunGame(NewGame()); err != nil {

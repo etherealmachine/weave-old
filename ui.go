@@ -305,7 +305,7 @@ func (ui *UI) UI() string {
 				<button onClick="AddLayer" color="#ffffff" margin="4px" padding="12px" btn="button.png 6">Add Layer</button>
 			</col>
 		</row>
-		<row grow="1 0" justify="end" margin="16px">
+		<row float="true" justify="end" margin="16px">
 			<img onClick="SelectTile" src="dungeon.png" scale="{{ .Scale }}" />
 		</row>
 	</col>`
