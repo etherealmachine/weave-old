@@ -3,46 +3,32 @@ package main
 import (
 	"encoding/json"
 	"image"
+	"log"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
-type Direction int
-
-const (
-	Above = Direction(0)
-	Below = Direction(1)
-	North = Direction(2)
-	South = Direction(3)
-	East  = Direction(4)
-	West  = Direction(5)
-)
-
-func (d Direction) Inverse() Direction {
-	if d%2 == 0 {
-		return Direction(d + 1)
-	}
-	return Direction(d - 1)
-}
-
 type Tilemap struct {
-	Tilesets  map[string]*Tileset
-	Locations []*Location
+	Tilesets map[string]*Tileset
+	Tiles    map[int]map[int][]*Tile
 }
 
-type Location struct {
-	Tileset   string
-	Index     int
-	X, Y      int
-	Neighbors [6]*Location
+type Tile struct {
+	Tileset string
+	Index   int
 }
 
 func NewTilemap() *Tilemap {
-	return &Tilemap{
+	t := &Tilemap{
 		Tilesets: make(map[string]*Tileset),
+		Tiles:    make(map[int]map[int][]*Tile),
 	}
+	if err := t.Load("map.json"); err != nil {
+		log.Fatal(err)
+	}
+	return t
 }
 
 func (m *Tilemap) AddTileset(filename string, size, spacing int) error {
@@ -77,40 +63,33 @@ func (m *Tilemap) Load(filename string) error {
 	return nil
 }
 
-func (m *Tilemap) SetTile(tileset string, index, x, y int) {
-	var neighbors [6]*Location
-	for _, loc := range m.Locations {
-		if loc.X == x && loc.Y == y {
-			loc.Tileset = tileset
-			loc.Index = index
-			return
-		} else if loc.X == x-1 && loc.Y == y {
-			neighbors[West] = loc
-		} else if loc.X == x+1 && loc.Y == y {
-			neighbors[East] = loc
-		} else if loc.X == x && loc.Y == y-1 {
-			neighbors[North] = loc
-		} else if loc.X == x && loc.Y == y+1 {
-			neighbors[South] = loc
-		}
+func (m *Tilemap) SetTile(tileset string, index, x, y int, replace bool) {
+	if m.Tiles[x] == nil {
+		m.Tiles[x] = make(map[int][]*Tile)
 	}
-	for dir, n := range neighbors {
-		if n != nil {
-			n.Neighbors[Direction(dir).Inverse()] = &Location{
-				Tileset: tileset,
-				Index:   index,
-				X:       x,
-				Y:       y,
-			}
-			return
+	if tileset == "" || index == 0 {
+		if l := len(m.Tiles[x][y]); l > 0 {
+			m.Tiles[x][y] = m.Tiles[x][y][:l-1]
 		}
+	} else if l := len(m.Tiles[x][y]); l == 0 {
+		m.Tiles[x][y] = []*Tile{{
+			Tileset: tileset,
+			Index:   index,
+		}}
+	} else if replace {
+		m.Tiles[x][y][l-1] = &Tile{
+			Tileset: tileset,
+			Index:   index,
+		}
+	} else if m.Tiles[x][y][l-1].Tileset != tileset || m.Tiles[x][y][l-1].Index != index {
+		m.Tiles[x][y] = append(m.Tiles[x][y], &Tile{
+			Tileset: tileset,
+			Index:   index,
+		})
 	}
-	m.Locations = append(m.Locations, &Location{
-		Tileset: tileset,
-		Index:   index,
-		X:       x,
-		Y:       y,
-	})
+	if err := m.Save("map.json"); err != nil {
+		log.Fatal(err)
+	}
 }
 
 type Tileset struct {

@@ -7,6 +7,7 @@ import (
 	"github.com/etherealmachine/bento"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 type UI struct {
@@ -46,16 +47,20 @@ func NewUI() *UI {
 }
 
 func (ui *UI) Draw(event *bento.Event) {
-	for _, loc := range ui.Tilemap.Locations {
-		tile := ui.Tilemap.Tilesets[loc.Tileset].GetTile(loc.Index)
-		bounds := tile.Bounds()
-		w, h := float64(bounds.Dx()), float64(bounds.Dy())
-		op := new(ebiten.DrawImageOptions)
-		op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
-		op.GeoM.Translate(float64(loc.X)*w, float64(loc.Y)*h)
-		op.GeoM.Translate(float64(ui.OffsetX), float64(ui.OffsetY))
-		op.GeoM.Scale(ui.Scale, ui.Scale)
-		event.Image.DrawImage(tile, op)
+	for x, ys := range ui.Tilemap.Tiles {
+		for y, tiles := range ys {
+			for _, tile := range tiles {
+				img := ui.Tilemap.Tilesets[tile.Tileset].GetTile(tile.Index)
+				bounds := img.Bounds()
+				w, h := float64(bounds.Dx()), float64(bounds.Dy())
+				op := new(ebiten.DrawImageOptions)
+				op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
+				op.GeoM.Translate(float64(x)*w, float64(y)*h)
+				op.GeoM.Translate(math.Floor(float64(ui.OffsetX)/16)*16, math.Floor(float64(ui.OffsetY)/16)*16)
+				op.GeoM.Scale(ui.Scale, ui.Scale)
+				event.Image.DrawImage(img, op)
+			}
+		}
 	}
 	if tile := ui.Tilemap.Tilesets[ui.SelectedTileset].GetTile(ui.SelectedTileIndex); tile != nil {
 		x, y := ebiten.CursorPosition()
@@ -82,14 +87,16 @@ func (ui *UI) Update(event *bento.Event) bool {
 }
 
 func (ui *UI) Hover(event *bento.Event) {
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		if tile := ui.Tilemap.Tilesets[ui.SelectedTileset].GetTile(ui.SelectedTileIndex); tile != nil {
-			x, y := ebiten.CursorPosition()
-			bounds := tile.Bounds()
-			w, h := ui.Scale*float64(bounds.Dx()), ui.Scale*float64(bounds.Dy())
-			tileX := int((float64(x) - ui.Scale*ui.OffsetX) / w)
-			tileY := int((float64(y) - ui.Scale*ui.OffsetY) / h)
-			ui.Tilemap.SetTile(ui.SelectedTileset, ui.SelectedTileIndex, tileX, tileY)
+	if tile := ui.Tilemap.Tilesets[ui.SelectedTileset].GetTile(ui.SelectedTileIndex); tile != nil {
+		x, y := ebiten.CursorPosition()
+		bounds := tile.Bounds()
+		w, h := ui.Scale*float64(bounds.Dx()), ui.Scale*float64(bounds.Dy())
+		tileX := int((float64(x) - ui.Scale*math.Floor(ui.OffsetX/16)*16) / w)
+		tileY := int((float64(y) - ui.Scale*math.Floor(ui.OffsetY/16)*16) / h)
+		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+			ui.Tilemap.SetTile(ui.SelectedTileset, ui.SelectedTileIndex, tileX, tileY, ebiten.IsKeyPressed(ebiten.KeyShift))
+		} else if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+			ui.Tilemap.SetTile("", 0, tileX, tileY, false)
 		}
 	}
 
