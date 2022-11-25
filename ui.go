@@ -6,6 +6,7 @@ import (
 
 	"github.com/etherealmachine/bento"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
 type UI struct {
@@ -15,6 +16,7 @@ type UI struct {
 	Scale             float64
 	OffsetX, OffsetY  float64
 	DragX, DragY      int
+	Frame             *bento.NineSlice
 }
 
 func NewUI() *UI {
@@ -35,18 +37,35 @@ func NewUI() *UI {
 		log.Fatal(err)
 	}
 	ui.SelectedTileset = "dungeon.png"
+	img, _, err := ebitenutil.NewImageFromFile("frame.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ui.Frame = bento.NewNineSlice(img, [3]int{4, 24, 4}, [3]int{4, 24, 4}, 0, 0)
 	return ui
 }
 
-func (ui *UI) Draw(img *ebiten.Image) {
+func (ui *UI) Draw(event *bento.Event) {
+	for _, loc := range ui.Tilemap.Locations {
+		tile := ui.Tilemap.Tilesets[loc.Tileset].GetTile(loc.Index)
+		bounds := tile.Bounds()
+		w, h := float64(bounds.Dx()), float64(bounds.Dy())
+		op := new(ebiten.DrawImageOptions)
+		op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
+		op.GeoM.Translate(float64(loc.X)*w, float64(loc.Y)*h)
+		op.GeoM.Translate(float64(ui.OffsetX), float64(ui.OffsetY))
+		op.GeoM.Scale(ui.Scale, ui.Scale)
+		event.Image.DrawImage(tile, op)
+	}
 	if tile := ui.Tilemap.Tilesets[ui.SelectedTileset].GetTile(ui.SelectedTileIndex); tile != nil {
 		x, y := ebiten.CursorPosition()
 		bounds := tile.Bounds()
 		w, h := ui.Scale*float64(bounds.Dx()), ui.Scale*float64(bounds.Dy())
 		op := new(ebiten.DrawImageOptions)
+		op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
 		op.GeoM.Scale(ui.Scale, ui.Scale)
 		op.GeoM.Translate(math.Floor(float64(x)/w)*w, math.Floor(float64(y)/h)*h)
-		img.DrawImage(tile, op)
+		event.Image.DrawImage(tile, op)
 	}
 }
 
@@ -68,13 +87,10 @@ func (ui *UI) Hover(event *bento.Event) {
 			x, y := ebiten.CursorPosition()
 			bounds := tile.Bounds()
 			w, h := ui.Scale*float64(bounds.Dx()), ui.Scale*float64(bounds.Dy())
-			tileX := int(float64(x) / w)
-			tileY := int(float64(y) / h)
+			tileX := int((float64(x) - ui.Scale*ui.OffsetX) / w)
+			tileY := int((float64(y) - ui.Scale*ui.OffsetY) / h)
 			ui.Tilemap.SetTile(ui.SelectedTileset, ui.SelectedTileIndex, tileX, tileY)
 		}
-	}
-
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
 	}
 
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
@@ -101,6 +117,14 @@ func (ui *UI) SelectTile(event *bento.Event) {
 	ui.SelectedTileIndex = ui.Tilemap.Tilesets[ui.SelectedTileset].TileAt(event.X/2, event.Y/2)
 }
 
+func (ui *UI) DrawSelectedTiles(event *bento.Event) {
+	rect := ui.Tilemap.Tilesets[ui.SelectedTileset].GetTileRect(ui.SelectedTileIndex)
+	if rect == nil {
+		return
+	}
+	ui.Frame.Draw(event.Image, rect.Min.X*2, rect.Min.Y*2, rect.Dx()*2, rect.Dy()*2, event.Op)
+}
+
 func (ui *UI) UI() string {
 	return `<col grow="1">
 		<row grow="1">
@@ -121,7 +145,7 @@ func (ui *UI) UI() string {
 					>{{ $name }}</button>
 				{{ end }}
 			</row>
-			<img onClick="SelectTile" src="{{ .SelectedTileset }}" scale="2" zIndex="100" />
+			<img onClick="SelectTile" onDraw="DrawSelectedTiles" src="{{ .SelectedTileset }}" scale="2" zIndex="100" />
 		</col>
 	</col>`
 }

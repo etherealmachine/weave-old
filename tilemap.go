@@ -9,8 +9,34 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
+type Direction int
+
+const (
+	Above = Direction(0)
+	Below = Direction(1)
+	North = Direction(2)
+	South = Direction(3)
+	East  = Direction(4)
+	West  = Direction(5)
+)
+
+func (d Direction) Inverse() Direction {
+	if d%2 == 0 {
+		return Direction(d + 1)
+	}
+	return Direction(d - 1)
+}
+
 type Tilemap struct {
-	Tilesets map[string]*Tileset
+	Tilesets  map[string]*Tileset
+	Locations []*Location
+}
+
+type Location struct {
+	Tileset   string
+	Index     int
+	X, Y      int
+	Neighbors [6]*Location
 }
 
 func NewTilemap() *Tilemap {
@@ -52,28 +78,39 @@ func (m *Tilemap) Load(filename string) error {
 }
 
 func (m *Tilemap) SetTile(tileset string, index, x, y int) {
-
-}
-
-func (s *Tileset) GetTile(index int) *ebiten.Image {
-	if s == nil || index <= 0 {
-		return nil
+	var neighbors [6]*Location
+	for _, loc := range m.Locations {
+		if loc.X == x && loc.Y == y {
+			loc.Tileset = tileset
+			loc.Index = index
+			return
+		} else if loc.X == x-1 && loc.Y == y {
+			neighbors[West] = loc
+		} else if loc.X == x+1 && loc.Y == y {
+			neighbors[East] = loc
+		} else if loc.X == x && loc.Y == y-1 {
+			neighbors[North] = loc
+		} else if loc.X == x && loc.Y == y+1 {
+			neighbors[South] = loc
+		}
 	}
-	if s.tiles[index] == nil {
-		w := s.Size + s.Spacing
-		x := ((index - 1) % s.Width) * w
-		y := ((index - 1) / s.Width) * w
-		s.tiles[index] = ebiten.NewImageFromImage(s.Img.SubImage(image.Rect(x, y, x+s.Size, y+s.Size)))
+	for dir, n := range neighbors {
+		if n != nil {
+			n.Neighbors[Direction(dir).Inverse()] = &Location{
+				Tileset: tileset,
+				Index:   index,
+				X:       x,
+				Y:       y,
+			}
+			return
+		}
 	}
-	return s.tiles[index]
-}
-
-func (s *Tileset) TileAt(x, y int) int {
-	if s == nil {
-		return 0
-	}
-	w := s.Size + s.Spacing
-	return (y/w)*s.Width + (x / w) + 1
+	m.Locations = append(m.Locations, &Location{
+		Tileset: tileset,
+		Index:   index,
+		X:       x,
+		Y:       y,
+	})
 }
 
 type Tileset struct {
@@ -103,6 +140,36 @@ func NewTileset(filename string, size, spacing int) (*Tileset, error) {
 	}, nil
 }
 
+func (s *Tileset) GetTile(index int) *ebiten.Image {
+	if s == nil || index <= 0 {
+		return nil
+	}
+	if s.tiles[index] == nil {
+		rect := s.GetTileRect(index)
+		s.tiles[index] = ebiten.NewImageFromImage(s.Img.SubImage(*rect))
+	}
+	return s.tiles[index]
+}
+
+func (s *Tileset) TileAt(x, y int) int {
+	if s == nil {
+		return 0
+	}
+	w := s.Size + s.Spacing
+	return (y/w)*s.Width + (x / w) + 1
+}
+
+func (s *Tileset) GetTileRect(index int) *image.Rectangle {
+	if s == nil || index <= 0 {
+		return nil
+	}
+	w := s.Size + s.Spacing
+	x := ((index - 1) % s.Width) * w
+	y := ((index - 1) / s.Width) * w
+	rect := image.Rect(x, y, x+s.Size, y+s.Size)
+	return &rect
+}
+
 /*
 func (ui *UI) tileAt(x, y, i int) int {
 	if i < 0 || i >= len(ui.Layers) {
@@ -117,17 +184,6 @@ func (ui *UI) tileAt(x, y, i int) int {
 	}
 	return layer.Tiles[y*layer.Width+x]
 }
-
-type direction int
-
-const (
-	below = direction(0)
-	above = direction(1)
-	up    = direction(2)
-	down  = direction(3)
-	left  = direction(4)
-	right = direction(5)
-)
 
 func (ui *UI) addEdge(t1 int, dir direction, t2 int) {
 	if t1 == 0 || t2 == 0 {
