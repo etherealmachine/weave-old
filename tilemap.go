@@ -66,6 +66,7 @@ func (m *Tilemap) Load(filename string) error {
 	if err := d.Decode(m); err != nil {
 		return err
 	}
+	m.Cleanup()
 	m.Analyze()
 	return nil
 }
@@ -88,6 +89,19 @@ func (m *Tilemap) SetTile(tile *Tile, x, y int, replace bool, z int) {
 		// insert
 		m.Tiles[x][y] = append(m.Tiles[x][y][:z+1], m.Tiles[x][y][z:]...)
 		m.Tiles[x][y][z] = tile
+	}
+	if err := m.Save("map.json"); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (m *Tilemap) Erase(rect image.Rectangle) {
+	for x := rect.Min.X; x < rect.Max.X; x++ {
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			if m.Tiles[x] != nil {
+				m.Tiles[x][y] = nil
+			}
+		}
 	}
 	if err := m.Save("map.json"); err != nil {
 		log.Fatal(err)
@@ -130,7 +144,7 @@ func (m *Tilemap) Cleanup() {
 	for x, ys := range m.Tiles {
 		for y, tiles := range ys {
 			for z, tile := range tiles {
-				if m.Tilesets[tile.Tileset] == nil {
+				if tile.Index <= 0 || m.Tilesets[tile.Tileset] == nil {
 					m.Tiles[x][y] = append(m.Tiles[x][y][:z], m.Tiles[x][y][z+1:]...)
 				}
 			}
@@ -182,6 +196,17 @@ func (m *Tilemap) Analyze() {
 					m.Adjacencies.AddEdge(m.TileAt(x+offset[0], y+offset[1], z+offset[2]), dir, tile)
 				}
 			}
+		}
+	}
+}
+
+func (m *Tilemap) Generate(rect image.Rectangle) {
+	for x := rect.Min.X; x < rect.Max.X; x++ {
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			m.SetTile(&Tile{
+				Tileset: "dungeon.png",
+				Index:   1,
+			}, x, y, false, 0)
 		}
 	}
 }

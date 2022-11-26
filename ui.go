@@ -164,6 +164,12 @@ func (ui *UI) Hover(event *bento.Event) {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		ui.SelectedTile = nil
 		ui.Selection = nil
+	} else if ui.Selection != nil {
+		if inpututil.IsKeyJustPressed(ebiten.KeyG) {
+			ui.Tilemap.Generate(*ui.Selection)
+		} else if inpututil.IsKeyJustPressed(ebiten.KeyDelete) || inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+			ui.Tilemap.Erase(*ui.Selection)
+		}
 	}
 
 	tileX, tileY := ui.mapTilePos(event.X, event.Y)
