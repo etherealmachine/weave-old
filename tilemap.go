@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"image"
 	"log"
+	"math"
+	"math/rand"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -158,26 +160,55 @@ func (m *Tilemap) Cleanup() {
 	}
 }
 
-type Graph map[string]map[int]map[string][]*Tile
+type Graph map[string]map[int]map[Direction][]*Tile
 
-var neighborOffsets = map[string][3]int{
-	"above": {0, 0, 1},
-	"below": {0, 0, -1},
-	"north": {0, 1, 0},
-	"south": {0, -1, 0},
-	"east":  {1, 0, 0},
-	"west":  {-1, 0, 0},
+type Direction string
+
+const (
+	Above = Direction("above")
+	Below = Direction("below")
+	North = Direction("north")
+	South = Direction("south")
+	East  = Direction("east")
+	West  = Direction("west")
+)
+
+func (d Direction) Inverse() Direction {
+	switch d {
+	case Above:
+		return Below
+	case Below:
+		return Above
+	case North:
+		return South
+	case South:
+		return North
+	case East:
+		return West
+	case West:
+		return East
+	}
+	return ""
 }
 
-func (g Graph) AddEdge(t1 *Tile, direction string, t2 *Tile) {
+var neighborOffsets = map[Direction][3]int{
+	Above: {0, 0, 1},
+	Below: {0, 0, -1},
+	North: {0, 1, 0},
+	South: {0, -1, 0},
+	East:  {1, 0, 0},
+	West:  {-1, 0, 0},
+}
+
+func (g Graph) AddEdge(t1 *Tile, direction Direction, t2 *Tile) {
 	if t1 == nil || t2 == nil {
 		return
 	}
 	if g[t1.Tileset] == nil {
-		g[t1.Tileset] = make(map[int]map[string][]*Tile)
+		g[t1.Tileset] = make(map[int]map[Direction][]*Tile)
 	}
 	if g[t1.Tileset][t1.Index] == nil {
-		g[t1.Tileset][t1.Index] = make(map[string][]*Tile)
+		g[t1.Tileset][t1.Index] = make(map[Direction][]*Tile)
 	}
 	for _, t := range g[t1.Tileset][t1.Index][direction] {
 		if t.Tileset == t2.Tileset && t.Index == t2.Index {
@@ -185,10 +216,34 @@ func (g Graph) AddEdge(t1 *Tile, direction string, t2 *Tile) {
 		}
 	}
 	g[t1.Tileset][t1.Index][direction] = append(g[t1.Tileset][t1.Index][direction], t2)
+	g.AddEdge(t2, direction.Inverse(), t1)
+}
+
+func (g Graph) AllTiles() []*Tile {
+	var tiles []*Tile
+	for _, tileset := range g {
+		for _, adj := range tileset {
+			for _, ts := range adj {
+				for _, t := range ts {
+					exists := false
+					for _, v := range tiles {
+						if t.Tileset == v.Tileset && t.Index != v.Index {
+							exists = true
+							break
+						}
+					}
+					if !exists {
+						tiles = append(tiles, t)
+					}
+				}
+			}
+		}
+	}
+	return tiles
 }
 
 func (m *Tilemap) Analyze() {
-	m.Adjacencies = make(map[string]map[int]map[string][]*Tile)
+	m.Adjacencies = make(map[string]map[int]map[Direction][]*Tile)
 	for x, ys := range m.Tiles {
 		for y, tiles := range ys {
 			for z, tile := range tiles {
@@ -201,12 +256,38 @@ func (m *Tilemap) Analyze() {
 }
 
 func (m *Tilemap) Generate(rect image.Rectangle) {
-	for x := rect.Min.X; x < rect.Max.X; x++ {
-		for y := rect.Min.Y; y < rect.Max.Y; y++ {
-			m.SetTile(&Tile{
-				Tileset: "dungeon.png",
-				Index:   1,
-			}, x, y, false, 0)
+	w, h := rect.Dx(), rect.Dy()
+	possibilities := make([][]*Tile, w*h)
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
+			possibilities[y*w+x] = m.Adjacencies.AllTiles()
+		}
+	}
+	for {
+		minCount, minIndex := math.MaxInt, -1
+		for x := 0; x < w; x++ {
+			for y := 0; y < h; y++ {
+				count := len(possibilities[y*w+x])
+				if count > 1 && count < minCount {
+					minCount = count
+					minIndex = y*w + x
+				}
+			}
+		}
+		if minIndex == -1 {
+			break
+		}
+		rand.Shuffle(len(possibilities[minIndex]), func(i, j int) {
+			possibilities[minIndex][i], possibilities[minIndex][j] = possibilities[minIndex][j], possibilities[minIndex][i]
+		})
+		possibilities[minIndex] = possibilities[minIndex][0:1]
+	}
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
+			if m.Tiles[x+rect.Min.X] == nil {
+				m.Tiles[x+rect.Min.X] = make(map[int][]*Tile)
+			}
+			m.Tiles[x+rect.Min.X][y+rect.Min.Y] = possibilities[y*w+x]
 		}
 	}
 }

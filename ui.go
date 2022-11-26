@@ -18,7 +18,7 @@ type UI struct {
 	Tilemap                *Tilemap
 	MapScale, TilesetScale float64
 	OffsetX, OffsetY       float64
-	DragX, DragY           int
+	Drag                   *[2]int
 	Frame                  *bento.NineSlice
 }
 
@@ -147,8 +147,7 @@ func (ui *UI) OnTilesetScroll(event *bento.Event) bool {
 func (ui *UI) Click(event *bento.Event) {
 	tileX, tileY := ui.mapTilePos(event.X, event.Y)
 	if ui.SelectedTile == nil {
-		ui.DragX = tileX
-		ui.DragY = tileY
+		ui.Drag = &[2]int{tileX, tileY}
 		selection := image.Rect(tileX, tileY, tileX, tileY)
 		ui.Selection = &selection
 	} else {
@@ -175,27 +174,24 @@ func (ui *UI) Hover(event *bento.Event) {
 	tileX, tileY := ui.mapTilePos(event.X, event.Y)
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
 		ui.Tilemap.EraseTile(tileX, tileY)
-	} else if ui.SelectedTile == nil && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		selection := image.Rect(ui.DragX, ui.DragY, tileX+1, tileY+1)
+	} else if ui.SelectedTile == nil && ui.Drag != nil && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		selection := image.Rect(ui.Drag[0], ui.Drag[1], tileX+1, tileY+1)
 		ui.Selection = &selection
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
-		ui.DragX = 0
-		ui.DragY = 0
-		if ui.Selection.Dx() == 1 && ui.Selection.Dy() == 1 {
+		ui.Drag = nil
+		if ui.Selection != nil && ui.Selection.Dx() == 1 && ui.Selection.Dy() == 1 {
 			ui.Selection = nil
 		}
 	}
 
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
-		if ui.DragX != 0 || ui.DragY != 0 {
-			ui.OffsetX += float64(event.X-ui.DragX) / ui.MapScale
-			ui.OffsetY += float64(event.Y-ui.DragY) / ui.MapScale
+		if ui.Drag != nil {
+			ui.OffsetX += float64(event.X-ui.Drag[0]) / ui.MapScale
+			ui.OffsetY += float64(event.Y-ui.Drag[1]) / ui.MapScale
 		}
-		ui.DragX = event.X
-		ui.DragY = event.Y
+		ui.Drag = &[2]int{event.X, event.Y}
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonMiddle) {
-		ui.DragX = 0
-		ui.DragY = 0
+		ui.Drag = nil
 	}
 }
 
