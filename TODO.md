@@ -1,6 +1,7 @@
+* Wave function collapse
 * Preview suggestions
   * Accept suggestions
 * Multi-select
   * Random
   * Paste
-* Improve delete
+* Undo/Redo

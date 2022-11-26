@@ -1,17 +1,20 @@
 package main
 
 import (
+	"image"
 	"log"
 	"math"
 
 	"github.com/etherealmachine/bento"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 type UI struct {
 	SelectedTileset        string
-	SelectedTileIndex      int
+	SelectedTile           *Tile
+	Selection              *image.Rectangle
 	Tilemap                *Tilemap
 	MapScale, TilesetScale float64
 	OffsetX, OffsetY       float64
@@ -54,15 +57,18 @@ func (ui *UI) Draw(event *bento.Event) {
 	if !ebiten.IsKeyPressed(ebiten.KeyControl) {
 		ui.drawHoverTile(event)
 	}
+	if ui.Selection != nil {
+		ui.drawSelection(event)
+	}
 }
 
 func (ui *UI) drawMap(event *bento.Event) {
+	w, h := float64(ui.Tilemap.TileWidth), float64(ui.Tilemap.TileHeight)
+	ox, oy := math.Floor(ui.OffsetX/w)*w, math.Floor(ui.OffsetY/h)*h
 	for x, ys := range ui.Tilemap.Tiles {
 		for y, tiles := range ys {
 			for _, tile := range tiles {
-				img := ui.Tilemap.Tilesets[tile.Tileset].GetTile(tile.Index)
-				w, h := float64(ui.Tilemap.TileWidth), float64(ui.Tilemap.TileHeight)
-				ox, oy := math.Floor(ui.OffsetX/w)*w, math.Floor(ui.OffsetY/h)*h
+				img := ui.Tilemap.TileImage(tile)
 				op := new(ebiten.DrawImageOptions)
 				op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
 				op.GeoM.Translate(float64(x)*w, float64(y)*h)
@@ -75,14 +81,13 @@ func (ui *UI) drawMap(event *bento.Event) {
 }
 
 func (ui *UI) drawHoverTile(event *bento.Event) {
-	x, y := ebiten.CursorPosition()
-	if tile := ui.Tilemap.Tilesets[ui.SelectedTileset].GetTile(ui.SelectedTileIndex); tile != nil {
+	if tile := ui.Tilemap.TileImage(ui.SelectedTile); tile != nil {
 		bounds := tile.Bounds()
 		w, h := ui.MapScale*float64(bounds.Dx()), ui.MapScale*float64(bounds.Dy())
 		op := new(ebiten.DrawImageOptions)
 		op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
 		op.GeoM.Scale(ui.MapScale, ui.MapScale)
-		op.GeoM.Translate(math.Floor(float64(x)/w)*w, math.Floor(float64(y)/h)*h)
+		op.GeoM.Translate(math.Floor(float64(event.X)/w)*w, math.Floor(float64(event.Y)/h)*h)
 		event.Image.DrawImage(tile, op)
 	} else {
 		op := new(ebiten.DrawImageOptions)
@@ -91,12 +96,28 @@ func (ui *UI) drawHoverTile(event *bento.Event) {
 		h := float64(ui.Tilemap.TileHeight) * ui.MapScale
 		ui.Frame.Draw(
 			event.Image,
-			int(math.Floor(float64(x)/w)*w),
-			int(math.Floor(float64(y)/h)*h),
+			int(math.Floor(float64(event.X)/w)*w),
+			int(math.Floor(float64(event.Y)/h)*h),
 			int(w),
 			int(h),
 			op)
 	}
+}
+
+func (ui *UI) drawSelection(event *bento.Event) {
+	if ui.Selection == nil || ui.Selection.Dx() == 0 || ui.Selection.Dy() == 0 {
+		return
+	}
+	w, h := float64(ui.Tilemap.TileWidth), float64(ui.Tilemap.TileHeight)
+	ox, oy := math.Floor(ui.OffsetX/w)*w, math.Floor(ui.OffsetY/h)*h
+	op := new(ebiten.DrawImageOptions)
+	op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
+	ui.Frame.Draw(event.Image,
+		int((float64(ui.Selection.Min.X)*w+ox)*ui.MapScale),
+		int((float64(ui.Selection.Min.Y)*h+oy)*ui.MapScale),
+		int(float64(ui.Selection.Dx())*w*ui.MapScale),
+		int(float64(ui.Selection.Dy())*h*ui.MapScale),
+		op)
 }
 
 func (ui *UI) OnMapScroll(event *bento.Event) bool {
@@ -123,17 +144,40 @@ func (ui *UI) OnTilesetScroll(event *bento.Event) bool {
 	return false
 }
 
-func (ui *UI) Hover(event *bento.Event) {
-	x, y := ebiten.CursorPosition()
-	tileX, tileY := ui.mapTilePos(x, y)
-	if ui.SelectedTileset != "" && ui.SelectedTileIndex != 0 && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+func (ui *UI) Click(event *bento.Event) {
+	tileX, tileY := ui.mapTilePos(event.X, event.Y)
+	if ui.SelectedTile == nil {
+		ui.DragX = tileX
+		ui.DragY = tileY
+		selection := image.Rect(tileX, tileY, tileX, tileY)
+		ui.Selection = &selection
+	} else {
 		z := math.MaxInt
 		if ebiten.IsKeyPressed(ebiten.KeyControl) {
 			z = 0
 		}
-		ui.Tilemap.SetTile(ui.SelectedTileset, ui.SelectedTileIndex, tileX, tileY, ebiten.IsKeyPressed(ebiten.KeyShift), z)
-	} else if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+		ui.Tilemap.SetTile(ui.SelectedTile, tileX, tileY, ebiten.IsKeyPressed(ebiten.KeyShift), z)
+	}
+}
+
+func (ui *UI) Hover(event *bento.Event) {
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		ui.SelectedTile = nil
+		ui.Selection = nil
+	}
+
+	tileX, tileY := ui.mapTilePos(event.X, event.Y)
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
 		ui.Tilemap.EraseTile(tileX, tileY)
+	} else if ui.SelectedTile == nil && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		selection := image.Rect(ui.DragX, ui.DragY, tileX+1, tileY+1)
+		ui.Selection = &selection
+	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		ui.DragX = 0
+		ui.DragY = 0
+		if ui.Selection.Dx() == 1 && ui.Selection.Dy() == 1 {
+			ui.Selection = nil
+		}
 	}
 
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
@@ -143,30 +187,31 @@ func (ui *UI) Hover(event *bento.Event) {
 		}
 		ui.DragX = event.X
 		ui.DragY = event.Y
-	} else {
+	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonMiddle) {
 		ui.DragX = 0
 		ui.DragY = 0
 	}
 }
 
 func (ui *UI) SelectTileset(event *bento.Event) {
-	if event.Box.Content != ui.SelectedTileset {
-		ui.SelectedTileset = event.Box.Content
-		ui.SelectedTileIndex = 0
-	}
+	ui.SelectedTileset = event.Box.Content
 }
 
 func (ui *UI) SelectTile(event *bento.Event) {
-	ui.SelectedTileIndex = ui.Tilemap.Tilesets[ui.SelectedTileset].TileAt(
+	index := ui.Tilemap.Tilesets[ui.SelectedTileset].TileAt(
 		int(float64(event.X)/ui.TilesetScale),
 		int(float64(event.Y)/ui.TilesetScale))
+	ui.SelectedTile = &Tile{
+		Tileset: ui.SelectedTileset,
+		Index:   index,
+	}
 }
 
 func (ui *UI) DrawSelectedTiles(event *bento.Event) {
-	rect := ui.Tilemap.Tilesets[ui.SelectedTileset].GetTileRect(ui.SelectedTileIndex)
-	if rect == nil {
+	if ui.SelectedTile == nil {
 		return
 	}
+	rect := ui.Tilemap.Tilesets[ui.SelectedTile.Tileset].TileRect(ui.SelectedTile.Index)
 	op := new(ebiten.DrawImageOptions)
 	op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
 	ui.Frame.Draw(
@@ -188,7 +233,7 @@ func (ui *UI) UI() string {
 	return `<col grow="1">
 		<row grow="1">
 			<col grow="1">
-				<canvas grow="1" onDraw="Draw" onHover="Hover" onScroll="OnMapScroll" />
+				<canvas grow="1" onDraw="Draw" onClick="Click" onHover="Hover" onScroll="OnMapScroll" />
 			</col>
 		</row>
 		<col float="true" justifySelf="end" margin="16px">
