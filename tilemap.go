@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"image"
 	"log"
-	"math"
-	"math/rand"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -16,7 +14,6 @@ type Tilemap struct {
 	TileWidth, TileHeight int
 	Tilesets              map[string]*Tileset
 	Tiles                 map[int]map[int][]*Tile
-	Adjacencies           Graph
 }
 
 type Tile struct {
@@ -45,7 +42,6 @@ func (m *Tilemap) AddTileset(filename string, size, spacing int) error {
 
 func (m *Tilemap) Save(filename string) error {
 	m.Cleanup()
-	m.Analyze()
 	f, err := os.Create(filename)
 	if err != nil {
 		return err
@@ -69,7 +65,6 @@ func (m *Tilemap) Load(filename string) error {
 		return err
 	}
 	m.Cleanup()
-	m.Analyze()
 	return nil
 }
 
@@ -146,7 +141,7 @@ func (m *Tilemap) Cleanup() {
 	for x, ys := range m.Tiles {
 		for y, tiles := range ys {
 			for z, tile := range tiles {
-				if tile.Index <= 0 || m.Tilesets[tile.Tileset] == nil {
+				if tile == nil || tile.Index <= 0 || m.Tilesets[tile.Tileset] == nil {
 					m.Tiles[x][y] = append(m.Tiles[x][y][:z], m.Tiles[x][y][z+1:]...)
 				}
 			}
@@ -160,134 +155,15 @@ func (m *Tilemap) Cleanup() {
 	}
 }
 
-type Graph map[string]map[int]map[Direction][]*Tile
-
-type Direction string
-
-const (
-	Above = Direction("above")
-	Below = Direction("below")
-	North = Direction("north")
-	South = Direction("south")
-	East  = Direction("east")
-	West  = Direction("west")
-)
-
-func (d Direction) Inverse() Direction {
-	switch d {
-	case Above:
-		return Below
-	case Below:
-		return Above
-	case North:
-		return South
-	case South:
-		return North
-	case East:
-		return West
-	case West:
-		return East
-	}
-	return ""
-}
-
-var neighborOffsets = map[Direction][3]int{
-	Above: {0, 0, 1},
-	Below: {0, 0, -1},
-	North: {0, 1, 0},
-	South: {0, -1, 0},
-	East:  {1, 0, 0},
-	West:  {-1, 0, 0},
-}
-
-func (g Graph) AddEdge(t1 *Tile, direction Direction, t2 *Tile) {
-	if t1 == nil || t2 == nil {
-		return
-	}
-	if g[t1.Tileset] == nil {
-		g[t1.Tileset] = make(map[int]map[Direction][]*Tile)
-	}
-	if g[t1.Tileset][t1.Index] == nil {
-		g[t1.Tileset][t1.Index] = make(map[Direction][]*Tile)
-	}
-	for _, t := range g[t1.Tileset][t1.Index][direction] {
-		if t.Tileset == t2.Tileset && t.Index == t2.Index {
-			return
-		}
-	}
-	g[t1.Tileset][t1.Index][direction] = append(g[t1.Tileset][t1.Index][direction], t2)
-	g.AddEdge(t2, direction.Inverse(), t1)
-}
-
-func (g Graph) AllTiles() []*Tile {
-	var tiles []*Tile
-	for _, tileset := range g {
-		for _, adj := range tileset {
-			for _, ts := range adj {
-				for _, t := range ts {
-					exists := false
-					for _, v := range tiles {
-						if t.Tileset == v.Tileset && t.Index != v.Index {
-							exists = true
-							break
-						}
-					}
-					if !exists {
-						tiles = append(tiles, t)
-					}
-				}
-			}
-		}
-	}
-	return tiles
-}
-
-func (m *Tilemap) Analyze() {
-	m.Adjacencies = make(map[string]map[int]map[Direction][]*Tile)
-	for x, ys := range m.Tiles {
-		for y, tiles := range ys {
-			for z, tile := range tiles {
-				for dir, offset := range neighborOffsets {
-					m.Adjacencies.AddEdge(m.TileAt(x+offset[0], y+offset[1], z+offset[2]), dir, tile)
-				}
-			}
-		}
-	}
-}
-
 func (m *Tilemap) Generate(rect image.Rectangle) {
-	w, h := rect.Dx(), rect.Dy()
-	possibilities := make([][]*Tile, w*h)
-	for x := 0; x < w; x++ {
-		for y := 0; y < h; y++ {
-			possibilities[y*w+x] = m.Adjacencies.AllTiles()
-		}
-	}
-	for {
-		minCount, minIndex := math.MaxInt, -1
-		for x := 0; x < w; x++ {
-			for y := 0; y < h; y++ {
-				count := len(possibilities[y*w+x])
-				if count > 1 && count < minCount {
-					minCount = count
-					minIndex = y*w + x
-				}
-			}
-		}
-		if minIndex == -1 {
-			break
-		}
-		rand.Shuffle(len(possibilities[minIndex]), func(i, j int) {
-			possibilities[minIndex][i], possibilities[minIndex][j] = possibilities[minIndex][j], possibilities[minIndex][i]
-		})
-		possibilities[minIndex] = possibilities[minIndex][0:1]
-	}
-	for x := 0; x < w; x++ {
-		for y := 0; y < h; y++ {
-			if m.Tiles[x+rect.Min.X] == nil {
+	g := NewGenerator(m, rect.Min.X, rect.Min.Y, rect.Dx(), rect.Dy())
+	tiles := g.Generate()
+	for x := 0; x < len(tiles); x++ {
+		for y := 0; y < len(tiles[x]); y++ {
+			if len(m.Tiles[x+rect.Min.X]) == 0 {
 				m.Tiles[x+rect.Min.X] = make(map[int][]*Tile)
 			}
-			m.Tiles[x+rect.Min.X][y+rect.Min.Y] = possibilities[y*w+x]
+			m.Tiles[x+rect.Min.X][y+rect.Min.Y] = tiles[x][y]
 		}
 	}
 }

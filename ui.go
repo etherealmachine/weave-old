@@ -150,12 +150,6 @@ func (ui *UI) Click(event *bento.Event) {
 		ui.Drag = &[2]int{tileX, tileY}
 		selection := image.Rect(tileX, tileY, tileX, tileY)
 		ui.Selection = &selection
-	} else {
-		z := math.MaxInt
-		if ebiten.IsKeyPressed(ebiten.KeyControl) {
-			z = 0
-		}
-		ui.Tilemap.SetTile(ui.SelectedTile, tileX, tileY, ebiten.IsKeyPressed(ebiten.KeyShift), z)
 	}
 }
 
@@ -182,6 +176,12 @@ func (ui *UI) Hover(event *bento.Event) {
 		if ui.Selection != nil && ui.Selection.Dx() == 1 && ui.Selection.Dy() == 1 {
 			ui.Selection = nil
 		}
+	} else if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		z := math.MaxInt
+		if ebiten.IsKeyPressed(ebiten.KeyControl) {
+			z = 0
+		}
+		ui.Tilemap.SetTile(ui.SelectedTile, tileX, tileY, ebiten.IsKeyPressed(ebiten.KeyShift), z)
 	}
 
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
