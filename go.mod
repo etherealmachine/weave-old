@@ -7,9 +7,9 @@ require (
 	github.com/hajimehoshi/ebiten/v2 v2.4.8
 )
 
-// replace github.com/etherealmachine/bento => /home/jpettit/code/bento
+replace github.com/etherealmachine/bento => /home/jpettit/code/bento
 // replace github.com/etherealmachine/bento => /Users/jpettit/code/bento
-replace github.com/etherealmachine/bento => C:\Users\james\code\bento
+// replace github.com/etherealmachine/bento => C:\Users\james\code\bento
 
 require (
 	github.com/ebitengine/purego v0.0.0-20220905075623-aeed57cda744 // indirect

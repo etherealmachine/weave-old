@@ -12,21 +12,21 @@ import (
 
 type Tilemap struct {
 	TileWidth, TileHeight int
-	Tilesets              map[string]*Tileset
+	Spritesheets          map[string]*Spritesheet
 	Tiles                 map[int]map[int][]*Tile
 }
 
 type Tile struct {
-	Tileset string
-	Index   int
+	Spritesheet string
+	Index       int
 }
 
 func NewTilemap(w, h int) *Tilemap {
 	t := &Tilemap{
-		TileWidth:  w,
-		TileHeight: h,
-		Tilesets:   make(map[string]*Tileset),
-		Tiles:      make(map[int]map[int][]*Tile),
+		TileWidth:    w,
+		TileHeight:   h,
+		Spritesheets: make(map[string]*Spritesheet),
+		Tiles:        make(map[int]map[int][]*Tile),
 	}
 	if err := t.Load("map.json"); err != nil {
 		log.Fatal(err)
@@ -36,7 +36,7 @@ func NewTilemap(w, h int) *Tilemap {
 
 func (m *Tilemap) AddTileset(filename string, size, spacing int) error {
 	var err error
-	m.Tilesets[filename], err = NewTileset(filename, size, spacing)
+	m.Spritesheets[filename], err = NewSpritesheet(filename, size, spacing)
 	return err
 }
 
@@ -118,10 +118,10 @@ func (m *Tilemap) TileImage(t *Tile) *ebiten.Image {
 	if t == nil {
 		return nil
 	}
-	if m.Tilesets[t.Tileset] == nil {
+	if m.Spritesheets[t.Spritesheet] == nil {
 		return nil
 	}
-	return m.Tilesets[t.Tileset].TileImage(t.Index)
+	return m.Spritesheets[t.Spritesheet].TileImage(t.Index)
 }
 
 func (m *Tilemap) TileAt(x, y, z int) *Tile {
@@ -141,7 +141,8 @@ func (m *Tilemap) Cleanup() {
 	for x, ys := range m.Tiles {
 		for y, tiles := range ys {
 			for z, tile := range tiles {
-				if tile == nil || tile.Index <= 0 || m.Tilesets[tile.Tileset] == nil {
+				if tile == nil || tile.Index <= 0 || m.Spritesheets[tile.Spritesheet] == nil {
+					log.Println(z, len(m.Tiles[x][y]))
 					m.Tiles[x][y] = append(m.Tiles[x][y][:z], m.Tiles[x][y][z+1:]...)
 				}
 			}
@@ -168,7 +169,7 @@ func (m *Tilemap) Generate(rect image.Rectangle) {
 	}
 }
 
-type Tileset struct {
+type Spritesheet struct {
 	Name          string
 	Img           *ebiten.Image
 	Size          int
@@ -177,14 +178,14 @@ type Tileset struct {
 	tiles         map[int]*ebiten.Image
 }
 
-func NewTileset(filename string, size, spacing int) (*Tileset, error) {
+func NewSpritesheet(filename string, size, spacing int) (*Spritesheet, error) {
 	img, _, err := ebitenutil.NewImageFromFile(filename)
 	if err != nil {
 		return nil, err
 	}
 	w := size + spacing
 	bounds := img.Bounds()
-	return &Tileset{
+	return &Spritesheet{
 		Name:    filename,
 		Img:     img,
 		Size:    size,
@@ -195,7 +196,7 @@ func NewTileset(filename string, size, spacing int) (*Tileset, error) {
 	}, nil
 }
 
-func (s *Tileset) TileImage(index int) *ebiten.Image {
+func (s *Spritesheet) TileImage(index int) *ebiten.Image {
 	if s == nil || index <= 0 {
 		return nil
 	}
@@ -206,7 +207,7 @@ func (s *Tileset) TileImage(index int) *ebiten.Image {
 	return s.tiles[index]
 }
 
-func (s *Tileset) TileAt(x, y int) int {
+func (s *Spritesheet) TileAt(x, y int) int {
 	if s == nil {
 		return 0
 	}
@@ -214,7 +215,7 @@ func (s *Tileset) TileAt(x, y int) int {
 	return (y/w)*s.Width + (x / w) + 1
 }
 
-func (s *Tileset) TileRect(index int) *image.Rectangle {
+func (s *Spritesheet) TileRect(index int) *image.Rectangle {
 	if s == nil || index <= 0 {
 		return nil
 	}

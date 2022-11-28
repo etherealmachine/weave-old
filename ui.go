@@ -74,6 +74,7 @@ func (ui *UI) drawMap(event *bento.Event) {
 				op.GeoM.Translate(float64(x)*w, float64(y)*h)
 				op.GeoM.Translate(ox, oy)
 				op.GeoM.Scale(ui.MapScale, ui.MapScale)
+				//op.GeoM.Skew(-0.7, 0)
 				event.Image.DrawImage(img, op)
 			}
 		}
@@ -164,6 +165,18 @@ func (ui *UI) Hover(event *bento.Event) {
 			ui.Tilemap.Erase(*ui.Selection)
 		}
 	}
+	if ebiten.IsKeyPressed(ebiten.KeyUp) {
+		ui.OffsetY++
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyDown) {
+		ui.OffsetY--
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+		ui.OffsetX++
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyRight) {
+		ui.OffsetX--
+	}
 
 	tileX, tileY := ui.mapTilePos(event.X, event.Y)
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
@@ -200,12 +213,12 @@ func (ui *UI) SelectTileset(event *bento.Event) {
 }
 
 func (ui *UI) SelectTile(event *bento.Event) {
-	index := ui.Tilemap.Tilesets[ui.SelectedTileset].TileAt(
+	index := ui.Tilemap.Spritesheets[ui.SelectedTileset].TileAt(
 		int(float64(event.X)/ui.TilesetScale),
 		int(float64(event.Y)/ui.TilesetScale))
 	ui.SelectedTile = &Tile{
-		Tileset: ui.SelectedTileset,
-		Index:   index,
+		Spritesheet: ui.SelectedTileset,
+		Index:       index,
 	}
 }
 
@@ -213,7 +226,7 @@ func (ui *UI) DrawSelectedTiles(event *bento.Event) {
 	if ui.SelectedTile == nil {
 		return
 	}
-	rect := ui.Tilemap.Tilesets[ui.SelectedTile.Tileset].TileRect(ui.SelectedTile.Index)
+	rect := ui.Tilemap.Spritesheets[ui.SelectedTile.Spritesheet].TileRect(ui.SelectedTile.Index)
 	op := new(ebiten.DrawImageOptions)
 	op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
 	ui.Frame.Draw(
@@ -240,7 +253,7 @@ func (ui *UI) UI() string {
 		</row>
 		<col float="true" justifySelf="end" margin="16px">
 			<row grow="1" justify="between" margin="0 0 12px 0">
-				{{ range $name, $tileset := .Tilemap.Tilesets }}
+				{{ range $name, $sheet := .Tilemap.Spritesheets }}
 					<button
 							font="NotoSans 18"
 							btn="button.png 6"
