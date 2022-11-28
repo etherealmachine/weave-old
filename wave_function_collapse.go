@@ -1,13 +1,17 @@
 package main
 
+import (
+	"math/rand"
+)
+
 type Tileset map[string]map[int]bool
 
 func NewTileset(tiles ...*Tile) Tileset {
-	ts := make(Tileset)
+	s := make(Tileset)
 	for _, t := range tiles {
-		ts.Add(t)
+		s.Add(t)
 	}
-	return ts
+	return s
 }
 
 func (s Tileset) Add(tiles ...*Tile) int {
@@ -126,6 +130,28 @@ func NewGenerator(m *Tilemap, x, y, w, h int) *Generator {
 			pos[x][y][0] = NewTileset(firstLayer...)
 		}
 	}
+	for {
+		changed := false
+		for x, ys := range pos {
+			for y, zs := range ys {
+				for z, possible := range zs {
+					for _, tile := range possible.Tiles() {
+						for dir, offset := range neighborOffsets {
+							nx, ny, nz := x+offset[0], y+offset[1], z+offset[2]
+							adj := adj.At(tile.Spritesheet, tile.Index, dir)
+							pos := pos.At(nx, ny, nz)
+							if pos != nil {
+								changed = changed || pos.Union(adj)
+							}
+						}
+					}
+				}
+			}
+		}
+		if !changed {
+			break
+		}
+	}
 	return &Generator{
 		Adj: adj,
 		Pos: pos,
@@ -200,28 +226,35 @@ func addEdge(adj AdjacencySet, t1 *Tile, direction Direction, t2 *Tile) {
 	}
 }
 
+type Location struct {
+	X, Y, Z  int
+	Possible Tileset
+}
+
+func (l *Location) Priority() int {
+	return -len(l.Possible)
+}
+
 func (g *Generator) Generate() [][][]*Tile {
-	for {
-		changed := false
-		for x, ys := range g.Pos {
-			for y, zs := range ys {
-				for z, possible := range zs {
-					for _, tile := range possible.Tiles() {
-						for dir, offset := range neighborOffsets {
-							nx, ny, nz := x+offset[0], y+offset[1], z+offset[2]
-							adj := g.Adj.At(tile.Spritesheet, tile.Index, dir)
-							pos := g.Pos.At(nx, ny, nz)
-							if pos != nil {
-								changed = changed || pos.Union(adj)
-							}
-						}
-					}
+	q := Heap[*Location]{}
+	q.Init()
+	for x, ys := range g.Pos {
+		for y, zs := range ys {
+			for z, possible := range zs {
+				if len(possible.Tiles()) > 0 {
+					q.Push(&Location{
+						X: x, Y: y, Z: z,
+						Possible: possible,
+					})
 				}
 			}
 		}
-		if !changed {
-			break
-		}
+	}
+	for q.Len() > 0 {
+		min := q.Pop()
+		choices := min.Possible.Tiles()
+		selection := rand.Intn(len(choices))
+		g.Pos[min.X][min.Y][min.Z] = NewTileset(choices[selection])
 	}
 	tiles := make([][][]*Tile, len(g.Pos))
 	for x, ys := range g.Pos {
