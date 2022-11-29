@@ -19,6 +19,7 @@ type UI struct {
 	MapScale, TilesetScale float64
 	OffsetX, OffsetY       float64
 	Drag                   *[2]int
+	HoverX, HoverY         int
 	Frame                  *bento.NineSlice
 }
 
@@ -146,15 +147,16 @@ func (ui *UI) OnTilesetScroll(event *bento.Event) bool {
 }
 
 func (ui *UI) Click(event *bento.Event) {
-	tileX, tileY := ui.mapTilePos(event.X, event.Y)
+	ui.HoverX, ui.HoverY = ui.mapTilePos(event.X, event.Y)
 	if ui.SelectedTile == nil {
-		ui.Drag = &[2]int{tileX, tileY}
-		selection := image.Rect(tileX, tileY, tileX, tileY)
+		ui.Drag = &[2]int{ui.HoverX, ui.HoverY}
+		selection := image.Rect(ui.HoverX, ui.HoverY, ui.HoverX, ui.HoverY)
 		ui.Selection = &selection
 	}
 }
 
 func (ui *UI) Hover(event *bento.Event) {
+	ui.HoverX, ui.HoverY = ui.mapTilePos(event.X, event.Y)
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		ui.SelectedTile = nil
 		ui.Selection = nil
@@ -251,6 +253,9 @@ func (ui *UI) UI() string {
 				<canvas grow="1" onDraw="Draw" onClick="Click" onHover="Hover" onScroll="OnMapScroll" />
 			</col>
 		</row>
+		<col float="true" justifySelf="start end" margin="16px">
+			<text font="RobotoMono 14" color="#ffffff">{{ .HoverX }}, {{ .HoverY }}</text>
+		</col>
 		<col float="true" justifySelf="end" margin="16px">
 			<row grow="1" justify="between" margin="0 0 12px 0">
 				{{ range $name, $sheet := .Tilemap.Spritesheets }}

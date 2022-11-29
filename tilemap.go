@@ -140,13 +140,21 @@ func (m *Tilemap) TileAt(x, y, z int) *Tile {
 func (m *Tilemap) Cleanup() {
 	for x, ys := range m.Tiles {
 		for y, tiles := range ys {
-			for z, tile := range tiles {
+			var stack []*Tile
+			for _, tile := range tiles {
 				if tile == nil || tile.Index <= 0 || m.Spritesheets[tile.Spritesheet] == nil {
-					log.Println(z, len(m.Tiles[x][y]))
-					m.Tiles[x][y] = append(m.Tiles[x][y][:z], m.Tiles[x][y][z+1:]...)
+					continue
 				}
+				if len(stack) > 0 {
+					prev := stack[len(stack)-1]
+					if prev.Spritesheet == tile.Spritesheet && prev.Index == tile.Index {
+						continue
+					}
+				}
+				stack = append(stack, tile)
 			}
-			if len(tiles) == 0 {
+			m.Tiles[x][y] = stack
+			if len(stack) == 0 {
 				delete(m.Tiles[x], y)
 			}
 		}

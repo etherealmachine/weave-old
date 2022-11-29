@@ -16,18 +16,24 @@ func (h Heap[E]) Len() int {
 	return len(h)
 }
 
-func (h Heap[E]) down(u int) {
-	v := u
-	if 2*u+1 < len(h) && h[2*u+1].Priority() < h[v].Priority() {
-		v = 2*u + 1
+func (h Heap[E]) down(u int) bool {
+	i := u
+	for {
+		j1 := 2*i + 1
+		if j1 >= len(h) || j1 < 0 { // j1 < 0 after int overflow
+			break
+		}
+		j := j1 // left child
+		if j2 := j1 + 1; j2 < len(h) && h[j2].Priority() < h[j1].Priority() {
+			j = j2 // = 2*i + 2  // right child
+		}
+		if h[j].Priority() >= h[i].Priority() {
+			break
+		}
+		h[i], h[j] = h[j], h[i]
+		i = j
 	}
-	if 2*u+2 < len(h) && h[2*u+2].Priority() < h[v].Priority() {
-		v = 2*u + 2
-	}
-	if v != u {
-		h[v], h[u] = h[u], h[v]
-		h.down(v)
-	}
+	return i > u
 }
 
 func (h Heap[E]) up(u int) {
@@ -49,4 +55,10 @@ func (h *Heap[E]) Pop() E {
 	*h = (*h)[:n-1]
 	h.down(0)
 	return x
+}
+
+func (h *Heap[E]) Fix(e E, i int) {
+	if !h.down(i) {
+		h.up(i)
+	}
 }
