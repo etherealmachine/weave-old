@@ -10,10 +10,46 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
-type Tilemap struct {
+type Map struct {
 	TileWidth, TileHeight int
 	Spritesheets          map[string]*Spritesheet
-	Tiles                 map[int]map[int][]*Tile
+	Tilemap               Tilemap
+}
+
+type Tilemap map[int]map[int][]*Tile
+
+func (m Tilemap) Set(tile *Tile, x, y int, replace bool, z int) {
+	if m[x] == nil {
+		m[x] = make(map[int][]*Tile)
+	}
+	l := len(m[x][y])
+	if l == 0 {
+		// first tile in the stack
+		m[x][y] = []*Tile{tile}
+	} else if z >= l {
+		// append
+		m[x][y] = append(m[x][y], tile)
+	} else if replace {
+		// replace
+		m[x][y][z] = tile
+	} else {
+		// insert
+		m[x][y] = append(m[x][y][:z+1], m[x][y][z:]...)
+		m[x][y][z] = tile
+	}
+}
+
+func (m Tilemap) At(x, y, z int) *Tile {
+	if len(m[x]) == 0 {
+		return nil
+	}
+	if len(m[x][y]) == 0 {
+		return nil
+	}
+	if z < 0 || z >= len(m[x][y]) {
+		return nil
+	}
+	return m[x][y][z]
 }
 
 type Tile struct {
@@ -21,12 +57,12 @@ type Tile struct {
 	Index       int
 }
 
-func NewTilemap(w, h int) *Tilemap {
-	t := &Tilemap{
+func NewMap(w, h int) *Map {
+	t := &Map{
 		TileWidth:    w,
 		TileHeight:   h,
 		Spritesheets: make(map[string]*Spritesheet),
-		Tiles:        make(map[int]map[int][]*Tile),
+		Tilemap:      make(map[int]map[int][]*Tile),
 	}
 	if err := t.Load("map.json"); err != nil {
 		log.Fatal(err)
@@ -34,13 +70,13 @@ func NewTilemap(w, h int) *Tilemap {
 	return t
 }
 
-func (m *Tilemap) AddTileset(filename string, size, spacing int) error {
+func (m *Map) AddTileset(filename string, size, spacing int) error {
 	var err error
 	m.Spritesheets[filename], err = NewSpritesheet(filename, size, spacing)
 	return err
 }
 
-func (m *Tilemap) Save(filename string) error {
+func (m *Map) Save(filename string) error {
 	m.Cleanup()
 	f, err := os.Create(filename)
 	if err != nil {
@@ -53,7 +89,7 @@ func (m *Tilemap) Save(filename string) error {
 	return nil
 }
 
-func (m *Tilemap) Load(filename string) error {
+func (m *Map) Load(filename string) error {
 	f, err := os.Open(filename)
 	if os.IsNotExist(err) {
 		return nil
@@ -68,35 +104,15 @@ func (m *Tilemap) Load(filename string) error {
 	return nil
 }
 
-func (m *Tilemap) SetTile(tile *Tile, x, y int, replace bool, z int) {
-	if m.Tiles[x] == nil {
-		m.Tiles[x] = make(map[int][]*Tile)
-	}
-	l := len(m.Tiles[x][y])
-	if l == 0 {
-		// first tile in the stack
-		m.Tiles[x][y] = []*Tile{tile}
-	} else if z >= l {
-		// append
-		m.Tiles[x][y] = append(m.Tiles[x][y], tile)
-	} else if replace {
-		// replace
-		m.Tiles[x][y][z] = tile
-	} else {
-		// insert
-		m.Tiles[x][y] = append(m.Tiles[x][y][:z+1], m.Tiles[x][y][z:]...)
-		m.Tiles[x][y][z] = tile
-	}
-	if err := m.Save("map.json"); err != nil {
-		log.Fatal(err)
-	}
+func (m *Map) SetTile() {
+
 }
 
-func (m *Tilemap) Erase(rect image.Rectangle) {
+func (m *Map) Erase(rect image.Rectangle) {
 	for x := rect.Min.X; x < rect.Max.X; x++ {
 		for y := rect.Min.Y; y < rect.Max.Y; y++ {
-			if m.Tiles[x] != nil {
-				m.Tiles[x][y] = nil
+			if m.Tilemap[x] != nil {
+				m.Tilemap[x][y] = nil
 			}
 		}
 	}
@@ -105,16 +121,16 @@ func (m *Tilemap) Erase(rect image.Rectangle) {
 	}
 }
 
-func (m *Tilemap) EraseTile(x, y int) {
-	if l := len(m.Tiles[x][y]); l > 0 {
-		m.Tiles[x][y] = m.Tiles[x][y][:l-1]
+func (m *Map) EraseTile(x, y int) {
+	if l := len(m.Tilemap[x][y]); l > 0 {
+		m.Tilemap[x][y] = m.Tilemap[x][y][:l-1]
 	}
 	if err := m.Save("map.json"); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func (m *Tilemap) TileImage(t *Tile) *ebiten.Image {
+func (m *Map) TileImage(t *Tile) *ebiten.Image {
 	if t == nil {
 		return nil
 	}
@@ -124,21 +140,8 @@ func (m *Tilemap) TileImage(t *Tile) *ebiten.Image {
 	return m.Spritesheets[t.Spritesheet].TileImage(t.Index)
 }
 
-func (m *Tilemap) TileAt(x, y, z int) *Tile {
-	if len(m.Tiles[x]) == 0 {
-		return nil
-	}
-	if len(m.Tiles[x][y]) == 0 {
-		return nil
-	}
-	if z < 0 || z >= len(m.Tiles[x][y]) {
-		return nil
-	}
-	return m.Tiles[x][y][z]
-}
-
-func (m *Tilemap) Cleanup() {
-	for x, ys := range m.Tiles {
+func (m *Map) Cleanup() {
+	for x, ys := range m.Tilemap {
 		for y, tiles := range ys {
 			var stack []*Tile
 			for _, tile := range tiles {
@@ -153,26 +156,26 @@ func (m *Tilemap) Cleanup() {
 				}
 				stack = append(stack, tile)
 			}
-			m.Tiles[x][y] = stack
+			m.Tilemap[x][y] = stack
 			if len(stack) == 0 {
-				delete(m.Tiles[x], y)
+				delete(m.Tilemap[x], y)
 			}
 		}
 		if len(ys) == 0 {
-			delete(m.Tiles, x)
+			delete(m.Tilemap, x)
 		}
 	}
 }
 
-func (m *Tilemap) Generate(rect image.Rectangle) {
-	g := NewGenerator(m, rect.Min.X, rect.Min.Y, rect.Dx(), rect.Dy())
+func (m *Map) Generate(rect image.Rectangle) {
+	g := NewGenerator(m.Tilemap, rect.Min.X, rect.Min.Y, rect.Dx(), rect.Dy())
 	tiles := g.Generate()
 	for x := 0; x < len(tiles); x++ {
 		for y := 0; y < len(tiles[x]); y++ {
-			if len(m.Tiles[x+rect.Min.X]) == 0 {
-				m.Tiles[x+rect.Min.X] = make(map[int][]*Tile)
+			if len(m.Tilemap[x+rect.Min.X]) == 0 {
+				m.Tilemap[x+rect.Min.X] = make(map[int][]*Tile)
 			}
-			m.Tiles[x+rect.Min.X][y+rect.Min.Y] = tiles[x][y]
+			m.Tilemap[x+rect.Min.X][y+rect.Min.Y] = tiles[x][y]
 		}
 	}
 }

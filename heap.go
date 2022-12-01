@@ -1,22 +1,19 @@
 package main
 
-type Prioritizable interface {
-	Priority() int
-}
+type Heap [][2]int
 
-type Heap[E Prioritizable] []E
-
-func (h Heap[E]) Init() {
+func NewHeap(priorities []int) Heap {
+	h := Heap(make([][2]int, len(priorities)))
+	for i, p := range priorities {
+		h[i] = [2]int{i, p}
+	}
 	for i := (len(h) - 1) / 2; i >= 0; i-- {
 		h.down(i)
 	}
+	return h
 }
 
-func (h Heap[E]) Len() int {
-	return len(h)
-}
-
-func (h Heap[E]) down(u int) bool {
+func (h Heap) down(u int) bool {
 	i := u
 	for {
 		j1 := 2*i + 1
@@ -24,10 +21,10 @@ func (h Heap[E]) down(u int) bool {
 			break
 		}
 		j := j1 // left child
-		if j2 := j1 + 1; j2 < len(h) && h[j2].Priority() < h[j1].Priority() {
+		if j2 := j1 + 1; j2 < len(h) && h[j2][1] < h[j1][1] {
 			j = j2 // = 2*i + 2  // right child
 		}
-		if h[j].Priority() >= h[i].Priority() {
+		if h[j][1] >= h[i][1] {
 			break
 		}
 		h[i], h[j] = h[j], h[i]
@@ -36,29 +33,24 @@ func (h Heap[E]) down(u int) bool {
 	return i > u
 }
 
-func (h Heap[E]) up(u int) {
-	for u != 0 && h[(u-1)/2].Priority() > h[u].Priority() {
+func (h Heap) up(u int) {
+	for u != 0 && h[(u-1)/2][1] > h[u][1] {
 		h[(u-1)/2], h[u] = h[u], h[(u-1)/2]
 		u = (u - 1) / 2
 	}
 }
 
-func (h *Heap[E]) Push(e E) {
-	*h = append(*h, e)
-	h.up(len(*h) - 1)
-}
-
-func (h *Heap[E]) Pop() E {
+func (h *Heap) Pop() int {
 	x := (*h)[0]
 	n := len(*h)
 	(*h)[0], (*h)[n-1] = (*h)[n-1], (*h)[0]
 	*h = (*h)[:n-1]
 	h.down(0)
-	return x
+	return x[0]
 }
 
-func (h *Heap[E]) Fix(e E, i int) {
-	if !h.down(i) {
-		h.up(i)
-	}
+func (h *Heap) Update(e int) {
+	//if !h.down(i) {
+	//	h.up(i)
+	//}
 }
