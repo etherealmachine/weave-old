@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"reflect"
 	"testing"
 )
@@ -74,8 +73,5 @@ func Test4DArray(t *testing.T) {
 	}
 	if got, want := a.Coords(a.Index(0, 1, 2, 3)), []int{0, 1, 2, 3}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("wrong coords, got %v, want %v", got, want)
-	}
-	for i, v := range a.Array() {
-		log.Println(a.Coords(i), i, v)
 	}
 }
