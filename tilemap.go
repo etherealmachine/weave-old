@@ -167,22 +167,20 @@ func (m *Map) Cleanup() {
 	}
 }
 
-func (m *Map) Generate(rect image.Rectangle) {
-	g := NewGenerator(m.Tilemap, rect.Dx(), rect.Dy())
+func (m *Map) Generate(rect image.Rectangle, seed int64) {
+	g := NewGenerator(m.Tilemap, rect.Dx(), rect.Dy(), seed)
 	g.Init()
 	for !g.Done() {
 	}
-	/*
-		tiles := g.Readout()
-		for x := 0; x < len(tiles); x++ {
-			for y := 0; y < len(tiles[x]); y++ {
-				if len(m.Tilemap[x+rect.Min.X]) == 0 {
-					m.Tilemap[x+rect.Min.X] = make(map[int][]*Tile)
-				}
-				m.Tilemap[x+rect.Min.X][y+rect.Min.Y] = tiles[x][y]
+	tiles := g.Readout()
+	for x := 0; x < len(tiles); x++ {
+		for y := 0; y < len(tiles[x]); y++ {
+			if len(m.Tilemap[x+rect.Min.X]) == 0 {
+				m.Tilemap[x+rect.Min.X] = make(map[int][]*Tile)
 			}
+			m.Tilemap[x+rect.Min.X][y+rect.Min.Y] = tiles[x][y]
 		}
-	*/
+	}
 }
 
 type Spritesheet struct {

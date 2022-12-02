@@ -4,6 +4,7 @@ import (
 	"image"
 	"log"
 	"math"
+	"time"
 
 	"github.com/etherealmachine/bento"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -162,7 +163,7 @@ func (ui *UI) Hover(event *bento.Event) {
 		ui.Selection = nil
 	} else if ui.Selection != nil {
 		if inpututil.IsKeyJustPressed(ebiten.KeyG) {
-			ui.Map.Generate(*ui.Selection)
+			ui.Map.Generate(*ui.Selection, time.Now().UnixMilli())
 		} else if inpututil.IsKeyJustPressed(ebiten.KeyDelete) || inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
 			ui.Map.Erase(*ui.Selection)
 		}
