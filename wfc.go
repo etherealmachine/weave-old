@@ -3,26 +3,21 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 )
 
 type Direction int
 
 const (
-	Below = Direction(0)
-	Above = Direction(1)
-	North = Direction(2)
-	South = Direction(3)
-	West  = Direction(4)
-	East  = Direction(5)
+	North = Direction(0)
+	South = Direction(1)
+	West  = Direction(2)
+	East  = Direction(3)
 )
 
 func (d Direction) String() string {
 	switch d {
-	case Below:
-		return "below"
-	case Above:
-		return "above"
 	case North:
 		return "north"
 	case South:
@@ -43,215 +38,214 @@ func (d Direction) Inverse() Direction {
 	return d - 1
 }
 
-var Neighbors = [6][3]int{
-	{0, 0, -1}, // Below
-	{0, 0, 1},  // Above
-	{0, -1, 0}, // North
-	{0, 1, 0},  // South
-	{-1, 0, 0}, // West
-	{1, 0, 0},  // East
+var Neighbors = [4][2]int{
+	{0, -1}, // North
+	{0, 1},  // South
+	{-1, 0}, // West
+	{1, 0},  // East
 }
 
 type Generator struct {
-	Domain               []*Tile
-	Width, Depth, Height int
-	Adj                  *NDArray[map[int]bool]
-	BanCount             *NDArray[int]
-	Banned               *NDArray[bool]
-	Support              *NDArray[int]
-	Map                  *NDArray[int]
-	Stack                [][4]int
-	Seed                 int64
-	RNG                  *rand.Rand
+	Domain        []Stack
+	Probabilities []float64
+	Width, Height int
+	Adj           *NDArray[map[int]bool]
+	BanCount      *NDArray[int]
+	Banned        *NDArray[bool]
+	Support       *NDArray[int]
+	Map           *NDArray[*int]
+	Stack         [][3]int
+	Seed          int64
+	RNG           *rand.Rand
+	Verify        bool
 }
 
-func NewGenerator(tiles Tilemap, w, h int, seed int64) *Generator {
-	domain := []*Tile{{Spritesheet: "", Index: 0}}
-	invDomain := map[string]map[int]int{"": {0: 0}}
-	maxZ := 0
-	for _, ys := range tiles {
-		for _, zs := range ys {
-			for z, tile := range zs {
-				if z > maxZ {
-					maxZ = z
-				}
-				exists := false
-				for _, t := range domain {
-					if t.Spritesheet == tile.Spritesheet && t.Index == tile.Index {
-						exists = true
-						break
-					}
-				}
-				if !exists {
-					if invDomain[tile.Spritesheet] == nil {
-						invDomain[tile.Spritesheet] = make(map[int]int)
-					}
-					invDomain[tile.Spritesheet][tile.Index] = len(domain)
-					domain = append(domain, tile)
+func NewGenerator(tilemap Tilemap, w, h int, seed int64) *Generator {
+	type e struct {
+		Index int
+		Stack Stack
+	}
+	domainMap := map[string]*e{
+		"": {Index: 0, Stack: nil},
+	}
+	for _, ys := range tilemap {
+		for _, tiles := range ys {
+			if h := tiles.Hash(); domainMap[h] == nil {
+				domainMap[h] = &e{
+					Index: len(domainMap),
+					Stack: tiles,
 				}
 			}
 		}
 	}
-	adj := NewNDArray[map[int]bool](len(domain), 6)
-	for x, ys := range tiles {
-		for y, zs := range ys {
-			for z, tile := range zs {
-				i := invDomain[tile.Spritesheet][tile.Index]
-				for d, o := range Neighbors {
-					n := tiles.At(x+o[0], y+o[1], z+o[2])
-					j := 0
-					if n != nil {
-						j = invDomain[n.Spritesheet][n.Index]
-					}
-					if adj.At(i, d) == nil {
-						adj.Set(make(map[int]bool), i, d)
-					}
-					adj.At(i, d)[j] = true
-					di := int(Direction(d).Inverse())
-					if adj.At(j, di) == nil {
-						adj.Set(make(map[int]bool), j, di)
-					}
-					adj.At(j, di)[i] = true
+	probs := make([]float64, len(domainMap))
+	adj := NewNDArray[map[int]bool](len(domainMap), len(Neighbors))
+	for x, ys := range tilemap {
+		for y, tiles := range ys {
+			i := domainMap[tiles.Hash()]
+			probs[i.Index]++
+			for d, o := range Neighbors {
+				nx, ny := x+o[0], y+o[1]
+				n := domainMap[tilemap[nx][ny].Hash()]
+				a := adj.At(i.Index, d)
+				if a == nil {
+					a = make(map[int]bool)
+					adj.Set(a, i.Index, d)
 				}
+				a[n.Index] = true
+				di := int(Direction(d).Inverse())
+				a = adj.At(n.Index, di)
+				if a == nil {
+					a = make(map[int]bool)
+					adj.Set(a, n.Index, di)
+				}
+				a[i.Index] = true
 			}
 		}
+	}
+	var sum float64
+	for _, count := range probs {
+		sum += count
+	}
+	for i, count := range probs {
+		probs[i] = count / sum
+	}
+	domain := make([]Stack, len(domainMap))
+	for _, e := range domainMap {
+		domain[e.Index] = e.Stack
 	}
 	return &Generator{
-		Domain: domain,
-		Width:  w,
-		Height: h,
-		Depth:  maxZ + 1,
-		Adj:    adj,
-		Seed:   seed,
+		Domain:        domain,
+		Probabilities: probs,
+		Width:         w,
+		Height:        h,
+		Adj:           adj,
+		Seed:          seed,
 	}
-}
-
-func (g *Generator) Index(t *Tile) int {
-	for i, o := range g.Domain {
-		if o == t {
-			return i
-		}
-	}
-	return -1
 }
 
 func (g *Generator) Init() {
-	g.BanCount = NewNDArray[int](g.Width, g.Height, g.Depth)
-	g.Banned = NewNDArray[bool](g.Width, g.Height, g.Depth, len(g.Domain))
+	g.BanCount = NewNDArray[int](g.Width, g.Height)
+	g.Banned = NewNDArray[bool](g.Width, g.Height, len(g.Domain))
 	g.initializeSupport()
-	g.Map = NewNDArray[int](g.Width, g.Height, g.Depth)
+	g.Map = NewNDArray[*int](g.Width, g.Height)
 	g.RNG = rand.New(rand.NewSource(g.Seed))
+	if g.Verify {
+		g.debugDomain()
+	}
 }
 
 func (g *Generator) Done() bool {
-	if len(g.Stack) > 0 {
-		curr := g.Stack[len(g.Stack)-1]
-		g.Stack = g.Stack[:len(g.Stack)-1]
-		x, y, z, i := curr[0], curr[1], curr[2], curr[3]
-		g.ban(x, y, z, i)
-		return false
+	if g.Verify {
+		g.verify()
+		defer g.verify()
 	}
-	return g.collapse()
-}
-
-func (g *Generator) leastEntropy() []int {
-	max := -1
-	maxI := -1
-	for i, c := range g.BanCount.Array() {
-		if len(g.Domain)-c > 1 && c > max {
-			max = c
-			maxI = i
-		}
-	}
-	if maxI == -1 {
-		return nil
-	}
-	return g.BanCount.Coords(maxI)
-}
-
-func (g *Generator) collapse() bool {
-	g.verify()
-	g.debug()
-	loc := g.leastEntropy()
-	if loc == nil {
+	if g.collapse() {
 		return true
 	}
-	x, y, z := loc[0], loc[1], loc[2]
-	ticket := g.RNG.Intn(len(g.Domain) - g.BanCount.At(x, y, z))
-	for i := range g.Domain {
-		if g.Banned.At(x, y, z, i) {
-			continue
-		}
-		if ticket == 0 {
-			fmt.Printf("collapsing to %d (%s:%d) at (%d, %d, %d)\n", i, g.Domain[i].Spritesheet, g.Domain[i].Index, x, y, z)
-			g.Map.Set(i, x, y, z)
-		} else {
-			g.Stack = append(g.Stack, [4]int{x, y, z, i})
-		}
-		ticket--
+	for len(g.Stack) > 0 {
+		curr := g.Stack[len(g.Stack)-1]
+		g.Stack = g.Stack[:len(g.Stack)-1]
+		x, y, i := curr[0], curr[1], curr[2]
+		g.ban(x, y, i)
 	}
-	fmt.Printf("collapse added %d to the stack\n", len(g.Stack))
 	return false
 }
 
-func (g *Generator) ban(x, y, z, i int) {
-	if g.Banned.At(x, y, z, i) {
-		return
+func (g *Generator) leastEntropy() (int, int) {
+	minX, minY := -1, -1
+	minEntropy := math.MaxFloat64
+	for x := 0; x < g.Width; x++ {
+		for y := 0; y < g.Height; y++ {
+			if entropy := g.entropy(x, y); entropy < minEntropy {
+				minEntropy = entropy
+				minX, minY = x, y
+			}
+		}
 	}
-	fmt.Printf("banning %d at (%d, %d, %d)\n", i, x, y, z)
-	g.Banned.Set(true, x, y, z, i)
-	g.BanCount.Set(g.BanCount.At(x, y, z)+1, x, y, z)
-	// for each possible neighbor, remove this tile from support in the given direction
-	for d, o := range Neighbors {
-		nx, ny, nz := x+o[0], y+o[1], z+o[2]
-		if nx < 0 || nx >= g.Width || ny < 0 || ny >= g.Height || nz < 0 || nz >= g.Depth {
+	return minX, minY
+}
+
+func (g *Generator) entropy(x, y int) float64 {
+	if g.Map.At(x, y) != nil {
+		return math.MaxFloat64
+	}
+	var e float64
+	for i, p := range g.Probabilities {
+		if p > 0 && !g.Banned.At(x, y, i) {
+			e -= p * math.Log(p)
+		}
+	}
+	return e
+}
+
+func (g *Generator) collapse() bool {
+	x, y := g.leastEntropy()
+	if x < 0 || y < 0 {
+		return true
+	}
+	var ticketCount float64
+	tickets := make(map[int]float64)
+	for i := range g.Domain {
+		if g.Banned.At(x, y, i) {
 			continue
 		}
-		if g.Map.At(nx, ny, nz) > 0 {
-			fmt.Printf("skipping support change for (%d, %d, %d)\n", nx, ny, nz)
+		tickets[i] = g.Probabilities[i]
+		ticketCount += g.Probabilities[i]
+	}
+	ticket := g.RNG.Float64() * ticketCount
+	winner := -1
+	for i := 0; i < len(g.Domain); i++ {
+		ticket -= tickets[i]
+		if winner == -1 && ticket <= 0 {
+			winner = i
+		} else {
+			g.Stack = append(g.Stack, [3]int{x, y, i})
+		}
+	}
+	if winner == -1 {
+		return true
+	}
+	g.Map.Set(&winner, x, y)
+	return false
+}
+
+func (g *Generator) ban(x, y, i int) {
+	if g.Banned.At(x, y, i) {
+		return
+	}
+	g.Banned.Set(true, x, y, i)
+	g.BanCount.Set(g.BanCount.At(x, y)+1, x, y)
+	// for each possible neighbor, remove this tile from support in the given direction
+	for d, o := range Neighbors {
+		nx, ny := x+o[0], y+o[1]
+		if nx < 0 || nx >= g.Width || ny < 0 || ny >= g.Height {
+			continue
+		}
+		if g.Map.At(nx, ny) != nil {
 			continue
 		}
 		for n := range g.Adj.At(i, d) {
-			g.Support.Set(g.Support.At(nx, ny, nz, n, d)-1, nx, ny, nz, n, d)
-			if g.Support.At(nx, ny, nz, n, d) == 0 {
-				fmt.Printf("removed last support for %d (%s:%d) at (%d, %d, %d)\n", n, g.Domain[n].Spritesheet, g.Domain[n].Index, nx, ny, nz)
-				g.Stack = append(g.Stack, [4]int{nx, ny, nz, n})
+			g.Support.Set(g.Support.At(nx, ny, n, d)-1, nx, ny, n, d)
+			if g.Support.At(nx, ny, n, d) == 0 {
+				g.Stack = append(g.Stack, [3]int{nx, ny, n})
 			}
 		}
 	}
-}
-
-func (g *Generator) Readout() [][][]*Tile {
-	tiles := make([][][]*Tile, g.Width)
-	for x := 0; x < g.Width; x++ {
-		tiles[x] = make([][]*Tile, g.Height)
-		for y := 0; y < g.Height; y++ {
-			var stack []*Tile
-			for z := 0; z < g.Depth; z++ {
-				if i := g.Map.At(x, y, z); i != 0 {
-					stack = append(stack, g.Domain[i])
-				}
-			}
-			tiles[x][y] = stack
-		}
-	}
-	return tiles
 }
 
 func (g *Generator) initializeSupport() {
 	g.Stack = nil
-	g.Support = NewNDArray[int](g.Width, g.Height, g.Depth, len(g.Domain), len(Neighbors))
+	g.Support = NewNDArray[int](g.Width, g.Height, len(g.Domain), len(Neighbors))
 	for x := 0; x < g.Width; x++ {
 		for y := 0; y < g.Height; y++ {
-			for z := 0; z < g.Depth; z++ {
-				for i := range g.Domain {
-					for d := range Neighbors {
-						support := len(g.Adj.At(i, int(Direction(d).Inverse())))
-						if support == 0 {
-							g.Stack = append(g.Stack, [4]int{x, y, z, i})
-						} else {
-							g.Support.Set(support, x, y, z, i, d)
-						}
+			for i := range g.Domain {
+				for d := range Neighbors {
+					support := len(g.Adj.At(i, int(Direction(d).Inverse())))
+					if support == 0 {
+						g.Stack = append(g.Stack, [3]int{x, y, i})
+					} else {
+						g.Support.Set(support, x, y, i, d)
 					}
 				}
 			}
@@ -260,67 +254,65 @@ func (g *Generator) initializeSupport() {
 }
 
 func (g *Generator) verify() {
+	g.debug()
 	for x := 0; x < g.Width; x++ {
 		for y := 0; y < g.Height; y++ {
-			for z := 0; z < g.Depth; z++ {
-				g.verifyBanCount(x, y, z)
-				if g.Map.At(x, y, z) == 0 {
-					for i := range g.Domain {
-						if !g.Banned.At(x, y, z, i) {
-							g.verifySupport(x, y, z, i)
-						}
+			g.verifyBanCount(x, y)
+			if g.Map.At(x, y) == nil {
+				for i := range g.Domain {
+					if !g.Banned.At(x, y, i) {
+						g.verifySupport(x, y, i)
 					}
 				}
-				g.verifyPlacement(x, y, z)
 			}
+			g.verifyPlacement(x, y)
 		}
 	}
 }
 
-func (g *Generator) verifyBanCount(x, y, z int) {
-	got := g.BanCount.At(x, y, z)
+func (g *Generator) verifyBanCount(x, y int) {
+	got := g.BanCount.At(x, y)
 	want := 0
 	for i := range g.Domain {
-		if g.Banned.At(x, y, z, i) {
+		if g.Banned.At(x, y, i) {
 			want++
 		}
 	}
 	if got != want {
-		log.Fatalf("incorrect ban count at (%d, %d, %d): got %d, want %d", x, y, z, got, want)
+		log.Fatalf("incorrect ban count at (%d, %d): got %d, want %d", x, y, got, want)
 	}
 }
 
-func (g *Generator) verifySupport(x, y, z, i int) {
+func (g *Generator) verifySupport(x, y, i int) {
 }
 
-func (g *Generator) verifyPlacement(x, y, z int) {
-	i := g.Map.At(x, y, z)
-	if i == 0 {
+func (g *Generator) verifyPlacement(x, y int) {
+	i := g.Map.At(x, y)
+	if i == nil {
 		return
 	}
 	for d, o := range Neighbors {
-		nx, ny, nz := x+o[0], y+o[1], z+o[2]
-		if nx < 0 || nx >= g.Width || ny < 0 || ny >= g.Height || nz < 0 || nz >= g.Depth {
+		nx, ny := x+o[0], y+o[1]
+		if nx < 0 || nx >= g.Width || ny < 0 || ny >= g.Height {
 			continue
 		}
-		n := g.Map.At(nx, ny, nz)
-		if n == 0 {
+		n := g.Map.At(nx, ny)
+		if n == nil {
 			continue
 		}
-		if !g.Adj.At(i, d)[n] {
-			log.Fatalf("incorrect placement at %d, %d, %d: %d (%s:%d) cannot have %d (%s:%d) %s",
-				x, y, z,
-				i, g.Domain[i].Spritesheet, g.Domain[i].Index,
-				n, g.Domain[n].Spritesheet, g.Domain[n].Index,
+		if !g.Adj.At(*i, d)[*n] {
+			log.Fatalf("incorrect placement at (%d, %d): %d cannot have %d %s",
+				x, y,
+				*i, *n,
 				Direction(d))
 		}
 	}
 }
 
-func (g *Generator) debug() {
+func (g *Generator) debugDomain() {
 	fmt.Print("domain:\n")
-	for i, tile := range g.Domain {
-		fmt.Printf("%d %s:%d\n", i, tile.Spritesheet, tile.Index)
+	for i, stack := range g.Domain {
+		fmt.Printf("%d %s\n", i, stack.Hash())
 	}
 	fmt.Print("adjacency:\n")
 	for i := range g.Domain {
@@ -332,34 +324,31 @@ func (g *Generator) debug() {
 			fmt.Println()
 		}
 	}
+}
+
+func (g *Generator) debug() {
 	fmt.Print("map:\n")
-	for z := 0; z < g.Depth; z++ {
-		fmt.Printf("z: %d\n", z)
-		for y := 0; y < g.Height; y++ {
-			for x := 0; x < g.Width; x++ {
-				if t := g.Map.At(x, y, z) - 1; t >= 0 {
-					fmt.Printf("%d", t)
-				} else {
-					fmt.Print(".")
-				}
-				if x+1 < g.Width {
-					fmt.Print(", ")
-				}
+	for y := 0; y < g.Height; y++ {
+		for x := 0; x < g.Width; x++ {
+			if i := g.Map.At(x, y); i != nil {
+				fmt.Printf("%d", *i)
+			} else {
+				fmt.Print(" ")
 			}
-			fmt.Println()
+			if x+1 < g.Width {
+				fmt.Print(", ")
+			}
 		}
+		fmt.Println()
 	}
 	fmt.Print("banCount:\n")
-	for z := 0; z < g.Depth; z++ {
-		fmt.Printf("z: %d\n", z)
-		for y := 0; y < g.Height; y++ {
-			for x := 0; x < g.Width; x++ {
-				fmt.Printf("%d", g.BanCount.At(x, y, z))
-				if x+1 < g.Width {
-					fmt.Print(", ")
-				}
+	for y := 0; y < g.Height; y++ {
+		for x := 0; x < g.Width; x++ {
+			fmt.Printf("%d", g.BanCount.At(x, y))
+			if x+1 < g.Width {
+				fmt.Print(", ")
 			}
-			fmt.Println()
 		}
+		fmt.Println()
 	}
 }

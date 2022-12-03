@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"reflect"
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -45,36 +45,41 @@ func TestWFC(t *testing.T) {
 	if got, want := g.Height, 6; got != want {
 		t.Fatalf("wrong height, got %d, want %d", got, want)
 	}
-	if got, want := g.Depth, 2; got != want {
-		t.Fatalf("wrong depth, got %d, want %d", got, want)
-	}
-	if got, want := len(g.Domain), 4; got != want {
+	if got, want := len(g.Domain), 5; got != want {
 		t.Fatalf("wrong domain, got %d, want %d", got, want)
 	}
-	wantAdj := make([][6][]int, 4)
-	// below, above, north, south, west, east
-	wantAdj[g.Index(tiles[0])] = [6][]int{{g.Index(tiles[1])}, {g.Index(tiles[1])}, {g.Index(tiles[2])}, {g.Index(tiles[2])}, {g.Index(tiles[1])}, {g.Index(tiles[1])}}
-	wantAdj[g.Index(tiles[1])] = [6][]int{{g.Index(tiles[0])}, {g.Index(tiles[0])}, {g.Index(tiles[3])}, {g.Index(tiles[3])}, {g.Index(tiles[0])}, {g.Index(tiles[0])}}
-	wantAdj[g.Index(tiles[2])] = [6][]int{{g.Index(tiles[3])}, {g.Index(tiles[3])}, {g.Index(tiles[0])}, {g.Index(tiles[0])}, {g.Index(tiles[3])}, {g.Index(tiles[3])}}
-	wantAdj[g.Index(tiles[3])] = [6][]int{{g.Index(tiles[2])}, {g.Index(tiles[2])}, {g.Index(tiles[1])}, {g.Index(tiles[1])}, {g.Index(tiles[2])}, {g.Index(tiles[2])}}
-	if got, want := g.Adj, wantAdj; !reflect.DeepEqual(got, want) {
-		t.Fatalf("wrong adj, got %v, want %v", got, want)
-	}
+	g.Verify = true
 	g.Init()
 	for !g.Done() {
 	}
-	newMap := g.Readout()
-	for z := 0; z < g.Depth; z++ {
-		for y := 0; y < g.Height; y++ {
-			for x := 0; x < g.Width; x++ {
-				if newMap[x][y] == nil || z >= len(newMap[x][y]) {
-					fmt.Print(" ")
-				} else {
-					fmt.Printf("%s", newMap[x][y][z].Spritesheet)
-				}
+	for y := 0; y < g.Height; y++ {
+		for x := 0; x < g.Width; x++ {
+			if i := g.Map.At(x, y); i != nil {
+				fmt.Printf("%s", g.Domain[*i].Hash())
+			} else {
+				fmt.Print(" ")
 			}
-			fmt.Println()
 		}
 		fmt.Println()
+	}
+}
+
+func TestWFCFuzz(t *testing.T) {
+	var tiles []*Tile
+	for i := 0; i < 10; i++ {
+		tiles = append(tiles, &Tile{Index: i})
+	}
+	m := make(Tilemap)
+	for x := 0; x < 10; x++ {
+		for y := 0; y < 10; y++ {
+			for z := 0; z < 4; z++ {
+				m.Set(tiles[rand.Intn(len(tiles))], x, y, false, 2)
+			}
+		}
+	}
+	g := NewGenerator(m, 20, 20, time.Now().UnixMilli())
+	g.Verify = true
+	g.Init()
+	for !g.Done() {
 	}
 }
