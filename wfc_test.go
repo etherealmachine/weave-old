@@ -16,9 +16,9 @@ func TestWFC(t *testing.T) {
 		{Spritesheet: "+", Index: 3}, // [+]
 	}
 	/*
-		+-+ +-+
-		|.| |.|
-		+-+ +-+
+		+-+ -+-
+		|.| .|.
+		+-+ -+-
 	*/
 	m.Set(tiles[3], 0, 0, false, 0)
 	m.Set(tiles[2], 1, 0, false, 0)
@@ -29,15 +29,15 @@ func TestWFC(t *testing.T) {
 	m.Set(tiles[3], 0, 2, false, 0)
 	m.Set(tiles[2], 1, 2, false, 0)
 	m.Set(tiles[3], 2, 2, false, 0)
-	m.Set(tiles[3], 0, 0, false, 1)
-	m.Set(tiles[2], 1, 0, false, 1)
-	m.Set(tiles[3], 2, 0, false, 1)
-	m.Set(tiles[1], 0, 1, false, 1)
-	m.Set(tiles[0], 1, 1, false, 1)
-	m.Set(tiles[1], 2, 1, false, 1)
-	m.Set(tiles[3], 0, 2, false, 1)
-	m.Set(tiles[2], 1, 2, false, 1)
-	m.Set(tiles[3], 2, 2, false, 1)
+	m.Set(tiles[2], 0, 0, false, 1)
+	m.Set(tiles[3], 1, 0, false, 1)
+	m.Set(tiles[2], 2, 0, false, 1)
+	m.Set(tiles[0], 0, 1, false, 1)
+	m.Set(tiles[1], 1, 1, false, 1)
+	m.Set(tiles[0], 2, 1, false, 1)
+	m.Set(tiles[2], 0, 2, false, 1)
+	m.Set(tiles[3], 1, 2, false, 1)
+	m.Set(tiles[2], 2, 2, false, 1)
 	g := NewGenerator(m, 6, 6, time.Now().UnixMilli())
 	if got, want := g.Width, 6; got != want {
 		t.Fatalf("wrong width, got %d, want %d", got, want)
@@ -53,10 +53,10 @@ func TestWFC(t *testing.T) {
 	}
 	wantAdj := make([][6][]int, 4)
 	// below, above, north, south, west, east
-	wantAdj[g.Index(tiles[0])] = [6][]int{{g.Index(tiles[0])}, {g.Index(tiles[0])}, {g.Index(tiles[2])}, {g.Index(tiles[2])}, {g.Index(tiles[1])}, {g.Index(tiles[1])}}
-	wantAdj[g.Index(tiles[1])] = [6][]int{{g.Index(tiles[1])}, {g.Index(tiles[1])}, {g.Index(tiles[3])}, {g.Index(tiles[3])}, {g.Index(tiles[0])}, {g.Index(tiles[0])}}
-	wantAdj[g.Index(tiles[2])] = [6][]int{{g.Index(tiles[2])}, {g.Index(tiles[2])}, {g.Index(tiles[0])}, {g.Index(tiles[0])}, {g.Index(tiles[3])}, {g.Index(tiles[3])}}
-	wantAdj[g.Index(tiles[3])] = [6][]int{{g.Index(tiles[3])}, {g.Index(tiles[3])}, {g.Index(tiles[1])}, {g.Index(tiles[1])}, {g.Index(tiles[2])}, {g.Index(tiles[2])}}
+	wantAdj[g.Index(tiles[0])] = [6][]int{{g.Index(tiles[1])}, {g.Index(tiles[1])}, {g.Index(tiles[2])}, {g.Index(tiles[2])}, {g.Index(tiles[1])}, {g.Index(tiles[1])}}
+	wantAdj[g.Index(tiles[1])] = [6][]int{{g.Index(tiles[0])}, {g.Index(tiles[0])}, {g.Index(tiles[3])}, {g.Index(tiles[3])}, {g.Index(tiles[0])}, {g.Index(tiles[0])}}
+	wantAdj[g.Index(tiles[2])] = [6][]int{{g.Index(tiles[3])}, {g.Index(tiles[3])}, {g.Index(tiles[0])}, {g.Index(tiles[0])}, {g.Index(tiles[3])}, {g.Index(tiles[3])}}
+	wantAdj[g.Index(tiles[3])] = [6][]int{{g.Index(tiles[2])}, {g.Index(tiles[2])}, {g.Index(tiles[1])}, {g.Index(tiles[1])}, {g.Index(tiles[2])}, {g.Index(tiles[2])}}
 	if got, want := g.Adj, wantAdj; !reflect.DeepEqual(got, want) {
 		t.Fatalf("wrong adj, got %v, want %v", got, want)
 	}
