@@ -47,6 +47,7 @@ var Neighbors = [4][2]int{
 
 type Generator struct {
 	Domain        []Stack
+	DomainIndex   map[string]int
 	Probabilities []float64
 	Width, Height int
 	Adj           *NDArray[map[int]bool]
@@ -60,46 +61,41 @@ type Generator struct {
 	Verify        bool
 }
 
-func NewGenerator(tilemap Tilemap, w, h int, seed int64) *Generator {
-	type e struct {
-		Index int
-		Stack Stack
-	}
-	domainMap := map[string]*e{
-		"": {Index: 0, Stack: nil},
+func NewGenerator(tilemap Tilemap) *Generator {
+	domainIndex := map[string]int{
+		"": 0,
 	}
 	for _, ys := range tilemap {
 		for _, tiles := range ys {
-			if h := tiles.Hash(); domainMap[h] == nil {
-				domainMap[h] = &e{
-					Index: len(domainMap),
-					Stack: tiles,
-				}
+			if h := tiles.Hash(); domainIndex[h] == 0 {
+				domainIndex[h] = len(domainIndex)
 			}
 		}
 	}
-	probs := make([]float64, len(domainMap))
-	adj := NewNDArray[map[int]bool](len(domainMap), len(Neighbors))
+	probs := make([]float64, len(domainIndex))
+	adj := NewNDArray[map[int]bool](len(domainIndex), len(Neighbors))
+	domain := make([]Stack, len(domainIndex))
 	for x, ys := range tilemap {
 		for y, tiles := range ys {
-			i := domainMap[tiles.Hash()]
-			probs[i.Index]++
+			i := domainIndex[tiles.Hash()]
+			domain[i] = tiles
+			probs[i]++
 			for d, o := range Neighbors {
 				nx, ny := x+o[0], y+o[1]
-				n := domainMap[tilemap[nx][ny].Hash()]
-				a := adj.At(i.Index, d)
+				n := domainIndex[tilemap[nx][ny].Hash()]
+				a := adj.At(i, d)
 				if a == nil {
 					a = make(map[int]bool)
-					adj.Set(a, i.Index, d)
+					adj.Set(a, i, d)
 				}
-				a[n.Index] = true
+				a[n] = true
 				di := int(Direction(d).Inverse())
-				a = adj.At(n.Index, di)
+				a = adj.At(n, di)
 				if a == nil {
 					a = make(map[int]bool)
-					adj.Set(a, n.Index, di)
+					adj.Set(a, n, di)
 				}
-				a[i.Index] = true
+				a[i] = true
 			}
 		}
 	}
@@ -110,25 +106,28 @@ func NewGenerator(tilemap Tilemap, w, h int, seed int64) *Generator {
 	for i, count := range probs {
 		probs[i] = count / sum
 	}
-	domain := make([]Stack, len(domainMap))
-	for _, e := range domainMap {
-		domain[e.Index] = e.Stack
-	}
 	return &Generator{
 		Domain:        domain,
+		DomainIndex:   domainIndex,
 		Probabilities: probs,
-		Width:         w,
-		Height:        h,
 		Adj:           adj,
-		Seed:          seed,
 	}
 }
 
-func (g *Generator) Init() {
+func (g *Generator) Init(width, height int, fixed Tilemap, seed int64) {
+	g.Width = width
+	g.Height = height
+	g.Seed = seed
 	g.BanCount = NewNDArray[int](g.Width, g.Height)
 	g.Banned = NewNDArray[bool](g.Width, g.Height, len(g.Domain))
 	g.initializeSupport()
 	g.Map = NewNDArray[*int](g.Width, g.Height)
+	for x, ys := range fixed {
+		for y, tiles := range ys {
+			i := g.DomainIndex[tiles.Hash()]
+			g.Map.Set(&i, x, y)
+		}
+	}
 	g.RNG = rand.New(rand.NewSource(g.Seed))
 	if g.Verify {
 		g.debugDomain()

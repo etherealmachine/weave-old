@@ -184,8 +184,8 @@ func (m *Map) Cleanup() {
 }
 
 func (m *Map) Generate(rect image.Rectangle, seed int64) {
-	g := NewGenerator(m.Tilemap, rect.Dx(), rect.Dy(), seed)
-	g.Init()
+	g := NewGenerator(m.Tilemap)
+	g.Init(rect.Dx(), rect.Dy(), nil, seed)
 	for !g.Done() {
 	}
 	for x := 0; x < g.Width; x++ {
