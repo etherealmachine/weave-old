@@ -59,6 +59,7 @@ type Generator struct {
 	Seed          int64
 	RNG           *rand.Rand
 	Verify        bool
+	Failed        bool
 }
 
 func NewGenerator(tilemap Tilemap) *Generator {
@@ -125,7 +126,9 @@ func (g *Generator) Init(width, height int, fixed Tilemap, seed int64) {
 	for x, ys := range fixed {
 		for y, tiles := range ys {
 			i := g.DomainIndex[tiles.Hash()]
-			g.Map.Set(&i, x, y)
+			if i > 0 {
+				g.Map.Set(&i, x, y)
+			}
 			for j := range g.Domain {
 				if j != i {
 					g.Stack = append(g.Stack, [3]int{x, y, j})
@@ -144,14 +147,14 @@ func (g *Generator) Done() bool {
 		g.verify()
 		defer g.verify()
 	}
-	if g.collapse() {
-		return true
-	}
 	for len(g.Stack) > 0 {
 		curr := g.Stack[len(g.Stack)-1]
 		g.Stack = g.Stack[:len(g.Stack)-1]
 		x, y, i := curr[0], curr[1], curr[2]
 		g.ban(x, y, i)
+	}
+	if g.collapse() {
+		return true
 	}
 	return false
 }
@@ -219,7 +222,12 @@ func (g *Generator) ban(x, y, i int) {
 		return
 	}
 	g.Banned.Set(true, x, y, i)
-	g.BanCount.Set(g.BanCount.At(x, y)+1, x, y)
+	banCount := g.BanCount.At(x, y) + 1
+	g.BanCount.Set(banCount, x, y)
+	if banCount == len(g.Domain) {
+		g.Failed = false
+		return
+	}
 	// for each possible neighbor, remove this tile from support in the given direction
 	for d, o := range Neighbors {
 		nx, ny := x+o[0], y+o[1]
