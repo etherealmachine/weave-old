@@ -2,11 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"image"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -16,61 +14,6 @@ type Map struct {
 	TileWidth, TileHeight int
 	Spritesheets          map[string]*Spritesheet
 	Tilemap               Tilemap
-}
-
-type Tilemap map[int]map[int]Stack
-
-func (m Tilemap) Set(tile *Tile, x, y int, replace bool, z int) {
-	if m[x] == nil {
-		m[x] = make(map[int]Stack)
-	}
-	l := len(m[x][y])
-	if l == 0 {
-		// first tile in the stack
-		m[x][y] = Stack{tile}
-	} else if z >= l {
-		// append
-		m[x][y] = append(m[x][y], tile)
-	} else if replace {
-		// replace
-		m[x][y][z] = tile
-	} else {
-		// insert
-		m[x][y] = append(m[x][y][:z+1], m[x][y][z:]...)
-		m[x][y][z] = tile
-	}
-}
-
-func (m Tilemap) At(x, y, z int) *Tile {
-	if len(m[x]) == 0 {
-		return nil
-	}
-	if len(m[x][y]) == 0 {
-		return nil
-	}
-	if z < 0 || z >= len(m[x][y]) {
-		return nil
-	}
-	return m[x][y][z]
-}
-
-type Tile struct {
-	Spritesheet string
-	Index       int
-}
-
-func (t *Tile) Hash() string {
-	return fmt.Sprintf("%s:%d", t.Spritesheet, t.Index)
-}
-
-type Stack []*Tile
-
-func (s Stack) Hash() string {
-	a := make([]string, len(s))
-	for i, t := range s {
-		a[i] = t.Hash()
-	}
-	return strings.Join(a, ",")
 }
 
 func NewMap(w, h int) *Map {
@@ -184,7 +127,6 @@ func (m *Map) Cleanup() {
 }
 
 func (m *Map) Generate(rect image.Rectangle, seed int64) {
-	g := NewGenerator(m.Tilemap)
 	subMap := make(map[int]map[int]Stack)
 	for x := rect.Min.X; x < rect.Max.X; x++ {
 		for y := rect.Min.Y; y < rect.Max.Y; y++ {
@@ -197,16 +139,18 @@ func (m *Map) Generate(rect image.Rectangle, seed int64) {
 			}
 		}
 	}
-	g.Init(rect.Dx(), rect.Dy(), subMap, seed)
+	//g := NewWFC(Analyze(m.Tilemap), rect.Dx(), rect.Dy(), subMap, seed)
+	g := NewGreedyBFS(Analyze(m.Tilemap), rect.Dx(), rect.Dy(), subMap, seed)
 	for !g.Done() {
 	}
-	for x := 0; x < g.Width; x++ {
-		for y := 0; y < g.Height; y++ {
-			if len(m.Tilemap[x+rect.Min.X]) == 0 {
-				m.Tilemap[x+rect.Min.X] = make(map[int]Stack)
-			}
-			if i := g.Map.At(x, y); i != nil {
-				m.Tilemap[x+rect.Min.X][y+rect.Min.Y] = g.Domain[*i]
+	result := g.Result()
+	for x := 0; x < len(result); x++ {
+		for y := 0; y < len(result[x]); y++ {
+			if result[x][y] != nil {
+				if len(m.Tilemap[x+rect.Min.X]) == 0 {
+					m.Tilemap[x+rect.Min.X] = make(map[int]Stack)
+				}
+				m.Tilemap[x+rect.Min.X][y+rect.Min.Y] = result[x][y]
 			}
 		}
 	}

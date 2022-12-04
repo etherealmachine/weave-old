@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"math"
 	"math/rand"
 )
@@ -45,111 +43,49 @@ var Neighbors = [4][2]int{
 	{1, 0},  // East
 }
 
-type Generator struct {
-	Domain        []Stack
-	DomainIndex   map[string]int
-	Probabilities []float64
-	Width, Height int
-	Adj           *NDArray[map[int]bool]
-	BanCount      *NDArray[int]
-	Banned        *NDArray[bool]
-	Support       *NDArray[int]
-	Map           *NDArray[*int]
-	Stack         [][3]int
-	Seed          int64
-	RNG           *rand.Rand
-	Verify        bool
-	Failed        bool
+type WFC struct {
+	*Analysis
+	width, height int
+	banCount      *NDArray[int]
+	banned        *NDArray[bool]
+	support       *NDArray[int]
+	result        *NDArray[*int]
+	stack         [][3]int
+	seed          int64
+	rng           *rand.Rand
+	failed        bool
 }
 
-func NewGenerator(tilemap Tilemap) *Generator {
-	domainIndex := map[string]int{
-		"": 0,
-	}
-	for _, ys := range tilemap {
-		for _, tiles := range ys {
-			if h := tiles.Hash(); domainIndex[h] == 0 {
-				domainIndex[h] = len(domainIndex)
-			}
-		}
-	}
-	probs := make([]float64, len(domainIndex))
-	adj := NewNDArray[map[int]bool](len(domainIndex), len(Neighbors))
-	domain := make([]Stack, len(domainIndex))
-	for x, ys := range tilemap {
-		for y, tiles := range ys {
-			i := domainIndex[tiles.Hash()]
-			domain[i] = tiles
-			probs[i]++
-			for d, o := range Neighbors {
-				nx, ny := x+o[0], y+o[1]
-				n := domainIndex[tilemap[nx][ny].Hash()]
-				a := adj.At(i, d)
-				if a == nil {
-					a = make(map[int]bool)
-					adj.Set(a, i, d)
-				}
-				a[n] = true
-				di := int(Direction(d).Inverse())
-				a = adj.At(n, di)
-				if a == nil {
-					a = make(map[int]bool)
-					adj.Set(a, n, di)
-				}
-				a[i] = true
-			}
-		}
-	}
-	var sum float64
-	for _, count := range probs {
-		sum += count
-	}
-	for i, count := range probs {
-		probs[i] = count / sum
-	}
-	return &Generator{
-		Domain:        domain,
-		DomainIndex:   domainIndex,
-		Probabilities: probs,
-		Adj:           adj,
-	}
-}
-
-func (g *Generator) Init(width, height int, fixed Tilemap, seed int64) {
-	g.Width = width
-	g.Height = height
-	g.Seed = seed
-	g.BanCount = NewNDArray[int](g.Width, g.Height)
-	g.Banned = NewNDArray[bool](g.Width, g.Height, len(g.Domain))
+func NewWFC(analysis *Analysis, width, height int, fixed Tilemap, seed int64) *WFC {
+	g := &WFC{Analysis: analysis}
+	g.width = width
+	g.height = height
+	g.seed = seed
+	g.banCount = NewNDArray[int](g.width, g.height)
+	g.banned = NewNDArray[bool](g.width, g.height, len(g.Domain))
 	g.initializeSupport()
-	g.Map = NewNDArray[*int](g.Width, g.Height)
+	g.result = NewNDArray[*int](g.width, g.height)
 	for x, ys := range fixed {
 		for y, tiles := range ys {
 			i := g.DomainIndex[tiles.Hash()]
 			if i > 0 {
-				g.Map.Set(&i, x, y)
+				g.result.Set(&i, x, y)
 			}
 			for j := range g.Domain {
 				if j != i {
-					g.Stack = append(g.Stack, [3]int{x, y, j})
+					g.stack = append(g.stack, [3]int{x, y, j})
 				}
 			}
 		}
 	}
-	g.RNG = rand.New(rand.NewSource(g.Seed))
-	if g.Verify {
-		g.debugDomain()
-	}
+	g.rng = rand.New(rand.NewSource(g.seed))
+	return g
 }
 
-func (g *Generator) Done() bool {
-	if g.Verify {
-		g.verify()
-		defer g.verify()
-	}
-	for len(g.Stack) > 0 {
-		curr := g.Stack[len(g.Stack)-1]
-		g.Stack = g.Stack[:len(g.Stack)-1]
+func (g *WFC) Done() bool {
+	for len(g.stack) > 0 {
+		curr := g.stack[len(g.stack)-1]
+		g.stack = g.stack[:len(g.stack)-1]
 		x, y, i := curr[0], curr[1], curr[2]
 		g.ban(x, y, i)
 	}
@@ -159,11 +95,25 @@ func (g *Generator) Done() bool {
 	return false
 }
 
-func (g *Generator) leastEntropy() (int, int) {
+func (g *WFC) Result() [][]Stack {
+	shape := g.result.Shape()
+	r := make([][]Stack, shape[0])
+	for x := 0; x < shape[0]; x++ {
+		r[x] = make([]Stack, shape[1])
+		for y := 0; y < shape[1]; y++ {
+			if i := g.result.At(x, y); i != nil {
+				r[x][y] = g.Domain[*i]
+			}
+		}
+	}
+	return r
+}
+
+func (g *WFC) leastEntropy() (int, int) {
 	minX, minY := -1, -1
 	minEntropy := math.MaxFloat64
-	for x := 0; x < g.Width; x++ {
-		for y := 0; y < g.Height; y++ {
+	for x := 0; x < g.width; x++ {
+		for y := 0; y < g.height; y++ {
 			if entropy := g.entropy(x, y); entropy < minEntropy {
 				minEntropy = entropy
 				minX, minY = x, y
@@ -173,20 +123,20 @@ func (g *Generator) leastEntropy() (int, int) {
 	return minX, minY
 }
 
-func (g *Generator) entropy(x, y int) float64 {
-	if g.Map.At(x, y) != nil {
+func (g *WFC) entropy(x, y int) float64 {
+	if g.result.At(x, y) != nil {
 		return math.MaxFloat64
 	}
 	var e float64
 	for i, p := range g.Probabilities {
-		if p > 0 && !g.Banned.At(x, y, i) {
+		if p > 0 && !g.banned.At(x, y, i) {
 			e -= p * math.Log(p)
 		}
 	}
 	return e
 }
 
-func (g *Generator) collapse() bool {
+func (g *WFC) collapse() bool {
 	x, y := g.leastEntropy()
 	if x < 0 || y < 0 {
 		return true
@@ -194,173 +144,73 @@ func (g *Generator) collapse() bool {
 	var ticketCount float64
 	tickets := make(map[int]float64)
 	for i := range g.Domain {
-		if g.Banned.At(x, y, i) {
+		if g.banned.At(x, y, i) {
 			continue
 		}
 		tickets[i] = g.Probabilities[i]
 		ticketCount += g.Probabilities[i]
 	}
-	ticket := g.RNG.Float64() * ticketCount
+	ticket := g.rng.Float64() * ticketCount
 	winner := -1
 	for i := 0; i < len(g.Domain); i++ {
 		ticket -= tickets[i]
 		if winner == -1 && ticket <= 0 {
 			winner = i
 		} else {
-			g.Stack = append(g.Stack, [3]int{x, y, i})
+			g.stack = append(g.stack, [3]int{x, y, i})
 		}
 	}
 	if winner == -1 {
 		return true
 	}
-	g.Map.Set(&winner, x, y)
+	g.result.Set(&winner, x, y)
 	return false
 }
 
-func (g *Generator) ban(x, y, i int) {
-	if g.Banned.At(x, y, i) {
+func (g *WFC) ban(x, y, i int) {
+	if g.banned.At(x, y, i) {
 		return
 	}
-	g.Banned.Set(true, x, y, i)
-	banCount := g.BanCount.At(x, y) + 1
-	g.BanCount.Set(banCount, x, y)
+	g.banned.Set(true, x, y, i)
+	banCount := g.banCount.At(x, y) + 1
+	g.banCount.Set(banCount, x, y)
 	if banCount == len(g.Domain) {
-		g.Failed = false
+		g.failed = false
 		return
 	}
 	// for each possible neighbor, remove this tile from support in the given direction
 	for d, o := range Neighbors {
 		nx, ny := x+o[0], y+o[1]
-		if nx < 0 || nx >= g.Width || ny < 0 || ny >= g.Height {
+		if nx < 0 || nx >= g.width || ny < 0 || ny >= g.height {
 			continue
 		}
-		if g.Map.At(nx, ny) != nil {
+		if g.result.At(nx, ny) != nil {
 			continue
 		}
 		for n := range g.Adj.At(i, d) {
-			g.Support.Set(g.Support.At(nx, ny, n, d)-1, nx, ny, n, d)
-			if g.Support.At(nx, ny, n, d) == 0 {
-				g.Stack = append(g.Stack, [3]int{nx, ny, n})
+			g.support.Set(g.support.At(nx, ny, n, d)-1, nx, ny, n, d)
+			if g.support.At(nx, ny, n, d) == 0 {
+				g.stack = append(g.stack, [3]int{nx, ny, n})
 			}
 		}
 	}
 }
 
-func (g *Generator) initializeSupport() {
-	g.Stack = nil
-	g.Support = NewNDArray[int](g.Width, g.Height, len(g.Domain), len(Neighbors))
-	for x := 0; x < g.Width; x++ {
-		for y := 0; y < g.Height; y++ {
+func (g *WFC) initializeSupport() {
+	g.stack = nil
+	g.support = NewNDArray[int](g.width, g.height, len(g.Domain), len(Neighbors))
+	for x := 0; x < g.width; x++ {
+		for y := 0; y < g.height; y++ {
 			for i := range g.Domain {
 				for d := range Neighbors {
 					support := len(g.Adj.At(i, int(Direction(d).Inverse())))
 					if support == 0 {
-						g.Stack = append(g.Stack, [3]int{x, y, i})
+						g.stack = append(g.stack, [3]int{x, y, i})
 					} else {
-						g.Support.Set(support, x, y, i, d)
+						g.support.Set(support, x, y, i, d)
 					}
 				}
 			}
 		}
-	}
-}
-
-func (g *Generator) verify() {
-	g.debug()
-	for x := 0; x < g.Width; x++ {
-		for y := 0; y < g.Height; y++ {
-			g.verifyBanCount(x, y)
-			if g.Map.At(x, y) == nil {
-				for i := range g.Domain {
-					if !g.Banned.At(x, y, i) {
-						g.verifySupport(x, y, i)
-					}
-				}
-			}
-			g.verifyPlacement(x, y)
-		}
-	}
-}
-
-func (g *Generator) verifyBanCount(x, y int) {
-	got := g.BanCount.At(x, y)
-	want := 0
-	for i := range g.Domain {
-		if g.Banned.At(x, y, i) {
-			want++
-		}
-	}
-	if got != want {
-		log.Fatalf("incorrect ban count at (%d, %d): got %d, want %d", x, y, got, want)
-	}
-}
-
-func (g *Generator) verifySupport(x, y, i int) {
-}
-
-func (g *Generator) verifyPlacement(x, y int) {
-	i := g.Map.At(x, y)
-	if i == nil {
-		return
-	}
-	for d, o := range Neighbors {
-		nx, ny := x+o[0], y+o[1]
-		if nx < 0 || nx >= g.Width || ny < 0 || ny >= g.Height {
-			continue
-		}
-		n := g.Map.At(nx, ny)
-		if n == nil {
-			continue
-		}
-		if !g.Adj.At(*i, d)[*n] {
-			log.Fatalf("incorrect placement at (%d, %d): %d cannot have %d %s",
-				x, y,
-				*i, *n,
-				Direction(d))
-		}
-	}
-}
-
-func (g *Generator) debugDomain() {
-	fmt.Print("domain:\n")
-	for i, stack := range g.Domain {
-		fmt.Printf("%d %s\n", i, stack.Hash())
-	}
-	fmt.Print("adjacency:\n")
-	for i := range g.Domain {
-		for d := range Neighbors {
-			fmt.Printf("%d %s: ", i, Direction(d))
-			for adj := range g.Adj.At(i, d) {
-				fmt.Printf("%d ", adj)
-			}
-			fmt.Println()
-		}
-	}
-}
-
-func (g *Generator) debug() {
-	fmt.Print("map:\n")
-	for y := 0; y < g.Height; y++ {
-		for x := 0; x < g.Width; x++ {
-			if i := g.Map.At(x, y); i != nil {
-				fmt.Printf("%d", *i)
-			} else {
-				fmt.Print(" ")
-			}
-			if x+1 < g.Width {
-				fmt.Print(", ")
-			}
-		}
-		fmt.Println()
-	}
-	fmt.Print("banCount:\n")
-	for y := 0; y < g.Height; y++ {
-		for x := 0; x < g.Width; x++ {
-			fmt.Printf("%d", g.BanCount.At(x, y))
-			if x+1 < g.Width {
-				fmt.Print(", ")
-			}
-		}
-		fmt.Println()
 	}
 }
