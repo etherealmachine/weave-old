@@ -126,6 +126,11 @@ func (g *Generator) Init(width, height int, fixed Tilemap, seed int64) {
 		for y, tiles := range ys {
 			i := g.DomainIndex[tiles.Hash()]
 			g.Map.Set(&i, x, y)
+			for j := range g.Domain {
+				if j != i {
+					g.Stack = append(g.Stack, [3]int{x, y, j})
+				}
+			}
 		}
 	}
 	g.RNG = rand.New(rand.NewSource(g.Seed))

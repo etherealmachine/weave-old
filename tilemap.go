@@ -185,7 +185,19 @@ func (m *Map) Cleanup() {
 
 func (m *Map) Generate(rect image.Rectangle, seed int64) {
 	g := NewGenerator(m.Tilemap)
-	g.Init(rect.Dx(), rect.Dy(), nil, seed)
+	subMap := make(map[int]map[int]Stack)
+	for x := rect.Min.X; x < rect.Max.X; x++ {
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			stack := m.Tilemap[x][y]
+			if stack != nil {
+				if subMap[x-rect.Min.X] == nil {
+					subMap[x-rect.Min.X] = make(map[int]Stack)
+				}
+				subMap[x-rect.Min.X][y-rect.Min.Y] = stack
+			}
+		}
+	}
+	g.Init(rect.Dx(), rect.Dy(), subMap, seed)
 	for !g.Done() {
 	}
 	for x := 0; x < g.Width; x++ {
