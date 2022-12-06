@@ -1,37 +1,48 @@
 package main
 
+import "log"
+
 /*
-GreedyBFS: pick a random allowed adjacent tile
+GreedyBFS: greedily expand around any fixed tiles
 */
 type GreedyBFS struct {
 	*Analysis
+	queue  [][2]int
+	result *NDArray[*int]
 }
 
 func NewGreedyBFS(analysis *Analysis, width, height int, fixed Tilemap, seed int64) *GreedyBFS {
+	g := &GreedyBFS{Analysis: analysis, result: NewNDArray[*int](width, height)}
 	for x := 0; x < width; x++ {
 		for y := 0; y < height; y++ {
 			if fixed[x][y] != nil {
-
-				fixed[x][y].Hash()
+				g.queue = append(g.queue, [2]int{x, y})
+				i := g.DomainIndex[fixed[x][y].Hash()]
+				g.result.Set(&i, x, y)
 			}
 		}
 	}
-	var queue [][2]int
 	for x := 0; x < width; x++ {
-		for y := range []int{0, height - 1} {
-			queue = append(queue, [2]int{x, y})
+		for y := 0; y < height; y++ {
+			if fixed[x][y] == nil {
+				g.queue = append(g.queue, [2]int{x, y})
+			}
 		}
 	}
-	for y := 0; y < height; y++ {
-		for x := range []int{0, width - 1} {
-			queue = append(queue, [2]int{x, y})
-		}
-	}
-	return &GreedyBFS{Analysis: analysis}
+	return g
 }
 
 func (g *GreedyBFS) Done() bool {
-	return true
+	if len(g.queue) == 0 {
+		return true
+	}
+	curr := g.queue[0]
+	g.queue = g.queue[1:]
+	if g.result.At(curr[0], curr[1]) == nil {
+		return false
+	}
+	log.Println(g.Domain[*g.result.At(curr[0], curr[1])])
+	return false
 }
 
 func (g *GreedyBFS) Result() [][]Stack {

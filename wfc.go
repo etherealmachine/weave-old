@@ -5,44 +5,6 @@ import (
 	"math/rand"
 )
 
-type Direction int
-
-const (
-	North = Direction(0)
-	South = Direction(1)
-	West  = Direction(2)
-	East  = Direction(3)
-)
-
-func (d Direction) String() string {
-	switch d {
-	case North:
-		return "north"
-	case South:
-		return "south"
-	case West:
-		return "west"
-	case East:
-		return "east"
-	default:
-		return "unknown"
-	}
-}
-
-func (d Direction) Inverse() Direction {
-	if d%2 == 0 {
-		return d + 1
-	}
-	return d - 1
-}
-
-var Neighbors = [4][2]int{
-	{0, -1}, // North
-	{0, 1},  // South
-	{-1, 0}, // West
-	{1, 0},  // East
-}
-
 type WFC struct {
 	*Analysis
 	width, height int
