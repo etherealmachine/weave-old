@@ -12,7 +12,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-type UI struct {
+type Editor struct {
 	SelectedTileset        string
 	SelectedTile           *Tile
 	Selection              *image.Rectangle
@@ -24,11 +24,11 @@ type UI struct {
 	Frame                  *bento.NineSlice
 }
 
-func NewUI() *UI {
-	ui := &UI{
+func NewEditor() *Editor {
+	ui := &Editor{
 		Map:          NewMap(16, 16),
 		MapScale:     1,
-		TilesetScale: 2,
+		TilesetScale: 1,
 	}
 	if err := ui.Map.AddTileset("dungeon.png", 16, 1); err != nil {
 		log.Fatal(err)
@@ -51,7 +51,7 @@ func NewUI() *UI {
 	return ui
 }
 
-func (ui *UI) Draw(event *bento.Event) {
+func (ui *Editor) Draw(event *bento.Event) {
 	if ebiten.IsKeyPressed(ebiten.KeyControl) {
 		ui.drawHoverTile(event)
 	}
@@ -64,7 +64,7 @@ func (ui *UI) Draw(event *bento.Event) {
 	}
 }
 
-func (ui *UI) drawMap(event *bento.Event) {
+func (ui *Editor) drawMap(event *bento.Event) {
 	w, h := float64(ui.Map.TileWidth), float64(ui.Map.TileHeight)
 	ox, oy := math.Floor(ui.OffsetX/w)*w, math.Floor(ui.OffsetY/h)*h
 	for x, ys := range ui.Map.Tilemap {
@@ -83,7 +83,7 @@ func (ui *UI) drawMap(event *bento.Event) {
 	}
 }
 
-func (ui *UI) drawHoverTile(event *bento.Event) {
+func (ui *Editor) drawHoverTile(event *bento.Event) {
 	if tile := ui.Map.TileImage(ui.SelectedTile); tile != nil {
 		bounds := tile.Bounds()
 		w, h := ui.MapScale*float64(bounds.Dx()), ui.MapScale*float64(bounds.Dy())
@@ -107,7 +107,7 @@ func (ui *UI) drawHoverTile(event *bento.Event) {
 	}
 }
 
-func (ui *UI) drawSelection(event *bento.Event) {
+func (ui *Editor) drawSelection(event *bento.Event) {
 	if ui.Selection == nil || ui.Selection.Dx() == 0 || ui.Selection.Dy() == 0 {
 		return
 	}
@@ -123,7 +123,7 @@ func (ui *UI) drawSelection(event *bento.Event) {
 		op)
 }
 
-func (ui *UI) OnMapScroll(event *bento.Event) bool {
+func (ui *Editor) OnMapScroll(event *bento.Event) bool {
 	_, sy := ebiten.Wheel()
 	if sy != 0 {
 		if sy > 0 {
@@ -135,7 +135,7 @@ func (ui *UI) OnMapScroll(event *bento.Event) bool {
 	return false
 }
 
-func (ui *UI) OnTilesetScroll(event *bento.Event) bool {
+func (ui *Editor) OnTilesetScroll(event *bento.Event) bool {
 	_, sy := ebiten.Wheel()
 	if sy != 0 {
 		if sy > 0 {
@@ -147,7 +147,7 @@ func (ui *UI) OnTilesetScroll(event *bento.Event) bool {
 	return false
 }
 
-func (ui *UI) Click(event *bento.Event) {
+func (ui *Editor) Click(event *bento.Event) {
 	ui.HoverX, ui.HoverY = ui.mapTilePos(event.X, event.Y)
 	if ui.SelectedTile == nil {
 		ui.Drag = &[2]int{ui.HoverX, ui.HoverY}
@@ -156,7 +156,7 @@ func (ui *UI) Click(event *bento.Event) {
 	}
 }
 
-func (ui *UI) Hover(event *bento.Event) {
+func (ui *Editor) Hover(event *bento.Event) {
 	ui.HoverX, ui.HoverY = ui.mapTilePos(event.X, event.Y)
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		ui.SelectedTile = nil
@@ -179,6 +179,9 @@ func (ui *UI) Hover(event *bento.Event) {
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
 		ui.OffsetX--
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		game.SetScene(NewExplore(ui.Map))
 	}
 
 	tileX, tileY := ui.mapTilePos(event.X, event.Y)
@@ -212,11 +215,11 @@ func (ui *UI) Hover(event *bento.Event) {
 	}
 }
 
-func (ui *UI) SelectTileset(event *bento.Event) {
+func (ui *Editor) SelectTileset(event *bento.Event) {
 	ui.SelectedTileset = event.Box.Content
 }
 
-func (ui *UI) SelectTile(event *bento.Event) {
+func (ui *Editor) SelectTile(event *bento.Event) {
 	index := ui.Map.Spritesheets[ui.SelectedTileset].TileAt(
 		int(float64(event.X)/ui.TilesetScale),
 		int(float64(event.Y)/ui.TilesetScale))
@@ -226,7 +229,7 @@ func (ui *UI) SelectTile(event *bento.Event) {
 	}
 }
 
-func (ui *UI) DrawSelectedTiles(event *bento.Event) {
+func (ui *Editor) DrawSelectedTiles(event *bento.Event) {
 	if ui.SelectedTile == nil {
 		return
 	}
@@ -242,13 +245,13 @@ func (ui *UI) DrawSelectedTiles(event *bento.Event) {
 		op)
 }
 
-func (ui *UI) mapTilePos(x, y int) (int, int) {
+func (ui *Editor) mapTilePos(x, y int) (int, int) {
 	w, h := float64(ui.Map.TileWidth), float64(ui.Map.TileHeight)
 	ox, oy := math.Floor(ui.OffsetX/w), math.Floor(ui.OffsetY/h)
 	return int(math.Floor(float64(x)/(w*ui.MapScale)) - ox), int(math.Floor(float64(y)/(h*ui.MapScale)) - oy)
 }
 
-func (ui *UI) UI() string {
+func (ui *Editor) UI() string {
 	return `<col grow="1">
 		<row grow="1">
 			<col grow="1">

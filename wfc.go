@@ -103,27 +103,16 @@ func (g *WFC) collapse() bool {
 	if x < 0 || y < 0 {
 		return true
 	}
-	var ticketCount float64
-	tickets := make(map[int]float64)
-	for i := range g.Domain {
-		if g.banned.At(x, y, i) {
-			continue
-		}
-		tickets[i] = g.Probabilities[i]
-		ticketCount += g.Probabilities[i]
-	}
-	ticket := g.rng.Float64() * ticketCount
-	winner := -1
-	for i := 0; i < len(g.Domain); i++ {
-		ticket -= tickets[i]
-		if winner == -1 && ticket <= 0 {
-			winner = i
-		} else {
-			g.stack = append(g.stack, [3]int{x, y, i})
-		}
-	}
+	winner := g.Lottery(g.rng, func(i int) bool {
+		return !g.banned.At(x, y, i)
+	})
 	if winner == -1 {
 		return true
+	}
+	for i := 0; i < len(g.Domain); i++ {
+		if i != winner {
+			g.stack = append(g.stack, [3]int{x, y, i})
+		}
 	}
 	g.result.Set(&winner, x, y)
 	return false

@@ -1,5 +1,7 @@
 package main
 
+import "math/rand"
+
 type Direction int
 
 const (
@@ -42,7 +44,7 @@ type Analysis struct {
 	Domain        []Stack
 	DomainIndex   map[string]int
 	Probabilities []float64
-	Adj           *NDArray[map[int]bool]
+	Adj           *NDArray[map[int]bool] // Domain, Neighbors
 }
 
 func Analyze(tilemap Tilemap) *Analysis {
@@ -98,27 +100,23 @@ func Analyze(tilemap Tilemap) *Analysis {
 	}
 }
 
-/*
-func (g *WFCGenerator) verifyPlacement(x, y int) {
-	i := g.Map.At(x, y)
-	if i == nil {
-		return
-	}
-	for d, o := range Neighbors {
-		nx, ny := x+o[0], y+o[1]
-		if nx < 0 || nx >= g.Width || ny < 0 || ny >= g.Height {
+func (a *Analysis) Lottery(rng *rand.Rand, allowed func(i int) bool) int {
+	var ticketCount float64
+	tickets := make(map[int]float64)
+	for i := range a.Domain {
+		if !allowed(i) {
 			continue
 		}
-		n := g.Map.At(nx, ny)
-		if n == nil {
-			continue
-		}
-		if !g.Adj.At(*i, d)[*n] {
-			log.Fatalf("incorrect placement at (%d, %d): %d cannot have %d %s",
-				x, y,
-				*i, *n,
-				Direction(d))
+		tickets[i] = a.Probabilities[i]
+		ticketCount += a.Probabilities[i]
+	}
+	ticket := rng.Float64() * ticketCount
+	winner := -1
+	for i := 0; i < len(a.Domain); i++ {
+		ticket -= tickets[i]
+		if winner == -1 && ticket <= 0 {
+			winner = i
 		}
 	}
+	return winner
 }
-*/

@@ -9,22 +9,22 @@ import (
 	_ "image/png"
 )
 
+var game *Game
+
 type Game struct {
-	ui *bento.Box
+	scene *bento.Box
 }
 
-func NewGame() *Game {
-	ui, err := bento.Build(NewUI())
+func (g *Game) SetScene(scene bento.Component) {
+	ui, err := bento.Build(scene)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &Game{
-		ui: ui,
-	}
+	g.scene = ui
 }
 
 func (g *Game) Update() error {
-	if err := g.ui.Update(); err != nil {
+	if err := g.scene.Update(); err != nil {
 		return err
 	}
 	return nil
@@ -32,7 +32,7 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Clear()
-	g.ui.Draw(screen)
+	g.scene.Draw(screen)
 }
 
 func (g *Game) Layout(ow, oh int) (int, int) {
@@ -45,7 +45,9 @@ func main() {
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetWindowTitle("weave")
 	//ebiten.SetFullscreen(true)
-	if err := ebiten.RunGame(NewGame()); err != nil {
+	game = &Game{}
+	game.SetScene(NewEditor())
+	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
 }
