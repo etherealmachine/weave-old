@@ -18,7 +18,7 @@ type Character struct {
 
 func NewExplore(m *Map) *Explore {
 	return &Explore{Map: m, MapScale: 1, Character: &Character{
-		Sprite: m.TileImage(&Tile{Spritesheet: "characters.png", Index: 529}),
+		Sprite: m.Image(&Tile{Spritesheet: "characters.png", Index: 529}),
 	}}
 }
 
@@ -36,7 +36,7 @@ func (ui *Explore) drawMap(event *bento.Event) {
 	for x, ys := range ui.Map.Tilemap {
 		for y, tiles := range ys {
 			for _, tile := range tiles {
-				img := ui.Map.TileImage(tile)
+				img := ui.Map.Image(tile)
 				op := new(ebiten.DrawImageOptions)
 				op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
 				op.GeoM.Translate(float64(x)*w, float64(y)*h)

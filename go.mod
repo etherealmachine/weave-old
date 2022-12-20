@@ -3,7 +3,7 @@ module weave
 go 1.19
 
 require (
-	github.com/etherealmachine/bento v0.4.1
+	github.com/etherealmachine/bento v0.4.2
 	github.com/hajimehoshi/ebiten/v2 v2.4.13
 	golang.org/x/exp v0.0.0-20221126150942-6ab00d035af9
 )

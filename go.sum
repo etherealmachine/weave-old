@@ -3,6 +3,8 @@ github.com/ebitengine/purego v0.0.0-20220905075623-aeed57cda744 h1:A8UnJ/5OKzki4
 github.com/ebitengine/purego v0.0.0-20220905075623-aeed57cda744/go.mod h1:Eh8I3yvknDYZeCuXH9kRNaPuHEwvXDCk378o9xszmHg=
 github.com/etherealmachine/bento v0.4.1 h1:MtzWppGnG5aXN+m1Eh99uxueC8E4A5IfhbWEet8I7KQ=
 github.com/etherealmachine/bento v0.4.1/go.mod h1:ix/WTBmBB8AYh/kMf3kFJWaHeuSZ9snekxSx1s8lpLM=
+github.com/etherealmachine/bento v0.4.2 h1:5il4l2hSekzy3SL/54OghlilKkSsx9sjWEpYk30vzrA=
+github.com/etherealmachine/bento v0.4.2/go.mod h1:ix/WTBmBB8AYh/kMf3kFJWaHeuSZ9snekxSx1s8lpLM=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20220806181222-55e207c401ad h1:kX51IjbsJPCvzV9jUoVQG9GEUqIq5hjfYzXTqQ52Rh8=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20220806181222-55e207c401ad/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/hajimehoshi/bitmapfont/v2 v2.2.2 h1:4z08Fk1m3pjtlO7BdoP48u5bp/Y8xmKshf44aCXgYpE=

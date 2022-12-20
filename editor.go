@@ -13,8 +13,6 @@ import (
 )
 
 type Editor struct {
-	SelectedTileset        string
-	SelectedTile           *Tile
 	Selection              *image.Rectangle
 	Map                    *Map
 	MapScale, TilesetScale float64
@@ -22,28 +20,18 @@ type Editor struct {
 	Drag                   *[2]int
 	HoverX, HoverY         int
 	Frame                  *bento.NineSlice
+	TileSelector           *TileSelector
 }
 
 func NewEditor() *Editor {
+	tileset := NewTileset("tilesets")
 	ui := &Editor{
-		Map:          NewMap(16, 16),
+		Map:          NewMap(16, 16, tileset),
 		MapScale:     1,
 		TilesetScale: 1,
+		TileSelector: NewTileSelector(tileset),
 	}
-	if err := ui.Map.AddTileset("dungeon.png", 16, 1); err != nil {
-		log.Fatal(err)
-	}
-	if err := ui.Map.AddTileset("general.png", 16, 1); err != nil {
-		log.Fatal(err)
-	}
-	if err := ui.Map.AddTileset("indoors.png", 16, 1); err != nil {
-		log.Fatal(err)
-	}
-	if err := ui.Map.AddTileset("characters.png", 16, 1); err != nil {
-		log.Fatal(err)
-	}
-	ui.SelectedTileset = "dungeon.png"
-	img, _, err := ebitenutil.NewImageFromFile("frame.png")
+	img, _, err := ebitenutil.NewImageFromFile("ui/frame.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -70,7 +58,10 @@ func (ui *Editor) drawMap(event *bento.Event) {
 	for x, ys := range ui.Map.Tilemap {
 		for y, tiles := range ys {
 			for _, tile := range tiles {
-				img := ui.Map.TileImage(tile)
+				img := ui.Map.Image(tile)
+				if img == nil {
+					log.Fatal(tile)
+				}
 				op := new(ebiten.DrawImageOptions)
 				op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
 				op.GeoM.Translate(float64(x)*w, float64(y)*h)
@@ -84,7 +75,7 @@ func (ui *Editor) drawMap(event *bento.Event) {
 }
 
 func (ui *Editor) drawHoverTile(event *bento.Event) {
-	if tile := ui.Map.TileImage(ui.SelectedTile); tile != nil {
+	if tile := ui.Map.Image(ui.TileSelector.Selected); tile != nil {
 		bounds := tile.Bounds()
 		w, h := ui.MapScale*float64(bounds.Dx()), ui.MapScale*float64(bounds.Dy())
 		op := new(ebiten.DrawImageOptions)
@@ -149,7 +140,7 @@ func (ui *Editor) OnTilesetScroll(event *bento.Event) bool {
 
 func (ui *Editor) Click(event *bento.Event) {
 	ui.HoverX, ui.HoverY = ui.mapTilePos(event.X, event.Y)
-	if ui.SelectedTile == nil {
+	if ui.TileSelector.Selected == nil {
 		ui.Drag = &[2]int{ui.HoverX, ui.HoverY}
 		selection := image.Rect(ui.HoverX, ui.HoverY, ui.HoverX, ui.HoverY)
 		ui.Selection = &selection
@@ -159,7 +150,7 @@ func (ui *Editor) Click(event *bento.Event) {
 func (ui *Editor) Hover(event *bento.Event) {
 	ui.HoverX, ui.HoverY = ui.mapTilePos(event.X, event.Y)
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-		ui.SelectedTile = nil
+		ui.TileSelector.Selected = nil
 		ui.Selection = nil
 	} else if ui.Selection != nil {
 		if inpututil.IsKeyJustPressed(ebiten.KeyG) {
@@ -187,7 +178,7 @@ func (ui *Editor) Hover(event *bento.Event) {
 	tileX, tileY := ui.mapTilePos(event.X, event.Y)
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
 		ui.Map.EraseTile(tileX, tileY)
-	} else if ui.SelectedTile == nil && ui.Drag != nil && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	} else if ui.TileSelector.Selected == nil && ui.Drag != nil && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		selection := image.Rect(ui.Drag[0], ui.Drag[1], tileX+1, tileY+1)
 		ui.Selection = &selection
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
@@ -200,7 +191,7 @@ func (ui *Editor) Hover(event *bento.Event) {
 		if ebiten.IsKeyPressed(ebiten.KeyControl) {
 			z = 0
 		}
-		ui.Map.Tilemap.Set(ui.SelectedTile, tileX, tileY, ebiten.IsKeyPressed(ebiten.KeyShift), z)
+		ui.Map.Tilemap.Set(ui.TileSelector.Selected, tileX, tileY, ebiten.IsKeyPressed(ebiten.KeyShift), z)
 		ui.Map.Save("map.json")
 	}
 
@@ -215,25 +206,11 @@ func (ui *Editor) Hover(event *bento.Event) {
 	}
 }
 
-func (ui *Editor) SelectTileset(event *bento.Event) {
-	ui.SelectedTileset = event.Box.Content
-}
-
-func (ui *Editor) SelectTile(event *bento.Event) {
-	index := ui.Map.Spritesheets[ui.SelectedTileset].TileAt(
-		int(float64(event.X)/ui.TilesetScale),
-		int(float64(event.Y)/ui.TilesetScale))
-	ui.SelectedTile = &Tile{
-		Spritesheet: ui.SelectedTileset,
-		Index:       index,
-	}
-}
-
 func (ui *Editor) DrawSelectedTiles(event *bento.Event) {
-	if ui.SelectedTile == nil {
+	if ui.TileSelector.Selected == nil {
 		return
 	}
-	rect := ui.Map.Spritesheets[ui.SelectedTile.Spritesheet].TileRect(ui.SelectedTile.Index)
+	rect := ui.Map.Spritesheets[ui.TileSelector.Selected.Spritesheet].Rect(ui.TileSelector.Selected.Index)
 	op := new(ebiten.DrawImageOptions)
 	op.GeoM.Translate(float64(event.Box.X), float64(event.Box.Y))
 	ui.Frame.Draw(
@@ -259,25 +236,13 @@ func (ui *Editor) UI() string {
 			</col>
 		</row>
 		<col float="true" justifySelf="start end" margin="16px">
-			{{ if ne .SelectedTile nil }}
-				<text font="RobotoMono 14" color="#ffffff">{{ .SelectedTile.Spritesheet }} {{ .SelectedTile.Index }}</text>
+			{{ if ne .TileSelector.Selected nil }}
+				<text font="RobotoMono 14" color="#ffffff">{{ .TileSelector.Selected.Spritesheet }} {{ .TileSelector.Selected.Index }}</text>
 			{{ end }}
 			<text font="RobotoMono 14" color="#ffffff">{{ .HoverX }}, {{ .HoverY }}</text>
 		</col>
 		<col float="true" justifySelf="end" margin="16px">
-			<row grow="1" justify="between" margin="0 0 12px 0">
-				{{ range $name, $sheet := .Map.Spritesheets }}
-					<button
-							font="NotoSans 18"
-							btn="button.png 6"
-							color="#ffffff"
-							padding="12px"
-							underline="{{ eq $.SelectedTileset $name }}"
-							onClick="SelectTileset"
-					>{{ $name }}</button>
-				{{ end }}
-			</row>
-			<img onClick="SelectTile" onDraw="DrawSelectedTiles" onScroll="OnTilesetScroll" src="{{ .SelectedTileset }}" scale="{{ .TilesetScale }}" zIndex="100" />
+			<TileSelector zIndex="100" />
 		</col>
 	</col>`
 }
